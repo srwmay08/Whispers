@@ -112,6 +112,17 @@ def create_corpse_object_data(defeated_entity_template, defeated_entity_runtime_
     # --- START NEW/IMPROVED LOOT GENERATION ---
     final_loot_on_corpse = []
 
+    original_key = defeated_entity_template.get("_id", defeated_entity_template.get("key"))
+    original_type = "monster" if "monster" in defeated_entity_runtime_id.lower() else "npc" # Heuristic
+
+    corpse_data = {
+        # ...
+        "original_template_key": original_key,
+        "original_template_type": original_type,
+        "inventory": final_loot_on_corpse, # Items, not gold
+        # ...
+    }
+
     # 1. Process 'carried_items' (items the NPC always has, not equipped)
     # You might want a config for drop chance of these too
     drop_carried_chance = getattr(config, 'NPC_DROP_CARRIED_CHANCE', 

@@ -189,12 +189,13 @@ def send_room_description(player_object: player_class.Player):
     current_room_id = getattr(player_object, 'current_room_id', config.DEFAULT_START_ROOM_ID)
     if not isinstance(current_room_id, int):
         try: current_room_id = int(current_room_id)
-        except ValueError: current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1) # Ensure fallback
+        except ValueError: current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1)
         player_object.current_room_id = current_room_id
-    room_data = GAME_ROOMS.get(current_room_id)
+    
+    room_data = GAME_ROOMS.get(current_room_id) # Get the current state of the room
     if not room_data:
         player_object.add_message(f"Error: You are in an unknown room (ID: {current_room_id})! Moving to safety...", "error_critical")
-        player_object.current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1) # Ensure fallback
+        player_object.current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1)
         if player_handler: player_handler.save_player(player_object)
         room_data = GAME_ROOMS.get(player_object.current_room_id)
         if not room_data:
@@ -204,12 +205,10 @@ def send_room_description(player_object: player_class.Player):
     final_room_description = environment_system.get_description_for_room(room_data)
     all_present_names = [p.name for sid, p in active_players.items() if hasattr(p, 'current_room_id') and p.current_room_id == current_room_id and sid != player_object.sid]
 
-    # Display NPCs
     for npc_key in room_data.get("npcs", []):
         npc_template = GAME_NPCS.get(npc_key)
-        if npc_template and not combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(npc_key): # Check if recently defeated
+        if npc_template and not combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(npc_key):
             all_present_names.append(npc_template.get("name", npc_key))
-
     # Display Monsters
     alive_monster_counts = {}
     monster_names_list_for_room_desc = []
@@ -262,33 +261,58 @@ def send_room_description(player_object: player_class.Player):
     all_present_names.sort()
     present_entities_str = "ALSO HERE: " + ", ".join(all_present_names) + "." if all_present_names else ""
 
-    # Display items and dynamic objects
+    # --- DETAILED DEBUG FOR ITEMS/OBJECTS ---
+    if config.DEBUG_MODE:
+        print(f"--- DEBUG SEND_ROOM_DESC (Room ID: {current_room_id}) ---")
+        print(f"  Static items in room_data['items']: {room_data.get('items', [])}")
+        print(f"  Dynamic objects in room_data['objects'] (keys): {list(room_data.get('objects', {}).keys())}")
+
     visible_item_names = []
-    for item_id_static in room_data.get("items", []): # Static items
+    # 1. Static items
+    for item_id_static in room_data.get("items", []):
         item_tpl_static = GAME_ITEMS.get(item_id_static)
         if item_tpl_static:
-            visible_item_names.append(item_tpl_static.get("name", item_id_static))
+            item_name_log = item_tpl_static.get("name", item_id_static)
+            visible_item_names.append(item_name_log)
+            if config.DEBUG_MODE: print(f"  Added static item to visible: '{item_name_log}'")
 
-    for obj_data_dynamic in room_data.get("objects", {}).values(): # Dynamic objects like corpses, ground items
-        if obj_data_dynamic.get("is_corpse") or obj_data_dynamic.get("is_ground_item"):
-            visible_item_names.append(obj_data_dynamic.get("name", "an object"))
+    # 2. Dynamic objects (corpses, items on ground)
+    for obj_id, obj_data_dynamic in room_data.get("objects", {}).items():
+        obj_name_log = obj_data_dynamic.get("name", "unnamed object")
+        is_corpse_log = obj_data_dynamic.get("is_corpse", False)
+        is_ground_item_log = obj_data_dynamic.get("is_ground_item", False)
+        if config.DEBUG_MODE:
+            print(f"  Checking dynamic object ID '{obj_id}': Name='{obj_name_log}', is_corpse={is_corpse_log}, is_ground_item={is_ground_item_log}")
+        
+        if is_corpse_log or is_ground_item_log:
+            visible_item_names.append(obj_name_log)
+            if config.DEBUG_MODE: print(f"    Added dynamic object to visible: '{obj_name_log}' (Corpse: {is_corpse_log}, GroundItem: {is_ground_item_log})")
 
-    # Display room features (defined_objects)
-    for feature_data in room_data.get("defined_objects", {}).values():
-        visible_item_names.append(feature_data.get("name", "a feature")) # Or handle features differently
+    # 3. Defined Room Features
+    for feature_key, feature_data in room_data.get("defined_objects", {}).items():
+        feature_name_log = feature_data.get("name", "unnamed feature")
+        visible_item_names.append(feature_name_log)
+        if config.DEBUG_MODE: print(f"  Added feature to visible: '{feature_name_log}'")
+    # --- END DETAILED DEBUG ---
 
-    items_on_ground_str = "YOU ALSO SEE: " + ", ".join(sorted(list(set(visible_item_names)))) + "." if visible_item_names else ""
-
+    items_on_ground_str = ""
+    if visible_item_names:
+        unique_sorted_names = sorted(list(set(visible_item_names)))
+        items_on_ground_str = "YOU ALSO SEE: " + ", ".join(unique_sorted_names) + "."
+        if config.DEBUG_MODE: print(f"  Final 'YOU ALSO SEE' string: {items_on_ground_str}")
+    elif config.DEBUG_MODE:
+        print("  No items/objects for 'YOU ALSO SEE'.")
+        
     room_data_payload = {
         "name": room_data.get("name", "Nowhere Special"),
         "description": final_room_description,
         "presence_summary": present_entities_str,
-        "items_summary": items_on_ground_str, # Changed key for clarity
+        "items_summary": items_on_ground_str,
         "exits": ", ".join(k.upper() for k in room_data.get("exits", {}).keys()) or "None",
         "type": "room_data_update"
     }
     player_object.add_message(room_data_payload)
-
+    if config.DEBUG_MODE: print(f"--- END DEBUG SEND_ROOM_DESC ---")
 
 @socketio.on('connect')
 def handle_connect():
@@ -734,20 +758,37 @@ def handle_player_command(data):
                         item_query = parts_equip[0].lower() # Query by lowercase name/id
                         slot_to_equip_to = parts_equip[1].lower().strip() if len(parts_equip) > 1 else None
 
-                        actual_item_id_to_equip = None
-                        # Try matching by exact ID first
-                        if item_query in player.inventory and GAME_ITEMS.get(item_query):
-                            actual_item_id_to_equip = item_query
-                        
-                        if not actual_item_id_to_equip: # If not by ID, try by name
-                            for item_id_in_inv in player.inventory:
-                                item_template = GAME_ITEMS.get(item_id_in_inv)
-                                if item_template and item_template.get("name", "").lower() == item_query:
+                    actual_item_id_to_equip = None
+                    item_query_lower = item_query.lower() # item_query is already parts_equip[0].lower()
+
+                    # 1. Try to match by exact item_id if what player typed is an ID in their inventory
+                    if item_query_lower in player.inventory and GAME_ITEMS.get(item_query_lower):
+                        actual_item_id_to_equip = item_query_lower
+                        if config.DEBUG_MODE: print(f"DEBUG EQUIP: Found item by ID in inventory: {actual_item_id_to_equip}")
+
+                    # 2. If not found by ID, iterate inventory and try to match by name (case-insensitive)
+                    if not actual_item_id_to_equip:
+                        for item_id_in_inv in player.inventory:
+                            item_template_inv = GAME_ITEMS.get(item_id_in_inv)
+                            if item_template_inv and item_template_inv.get("name", "").lower() == item_query_lower:
+                                actual_item_id_to_equip = item_id_in_inv
+                                if config.DEBUG_MODE: print(f"DEBUG EQUIP: Found item by name in inventory: {actual_item_id_to_equip} (matched '{item_query_lower}')")
+                                break
+
+                    # 3. (Optional Advanced) If still not found, try matching by keywords
+                    if not actual_item_id_to_equip:
+                        for item_id_in_inv in player.inventory:
+                            item_template_inv = GAME_ITEMS.get(item_id_in_inv)
+                            if item_template_inv:
+                                keywords = [k.lower() for k in item_template_inv.get("keywords", [])]
+                                if item_query_lower in keywords:
                                     actual_item_id_to_equip = item_id_in_inv
+                                    if config.DEBUG_MODE: print(f"DEBUG EQUIP: Found item by keyword in inventory: {actual_item_id_to_equip} (matched '{item_query_lower}')")
                                     break
-                        
+
                         if not actual_item_id_to_equip:
-                            player.add_message(f"You don't have a '{parts_equip[0]}'.", "error")
+                        # Use parts_equip[0] for the message to show what player typed
+                        player.add_message(f"You don't have a '{parts_equip[0]}'.", "error")
                         elif not slot_to_equip_to:
                             item_template_for_slot = GAME_ITEMS.get(actual_item_id_to_equip)
                             if item_template_for_slot:
@@ -766,6 +807,7 @@ def handle_player_command(data):
                             elif hasattr(player, 'equip_item'):
                                 player.equip_item(actual_item_id_to_equip, slot_to_equip_to, GAME_ITEMS, GAME_RACES)
                             else: player.add_message("Equipment system error.", "error_critical")
+
                     player.next_action_time = time.time() + rt_equip
 
                 elif verb == "unequip" or verb == "remove":
@@ -796,8 +838,70 @@ def handle_player_command(data):
                         
                         if not unequipped_successfully:
                              player.add_message(f"You are not wearing '{target_arg}' or '{target_arg}' is not a valid slot to unequip from directly.", "error")
-                    else: player.add_message("Equipment system error.", "error_critical")
-                    player.next_action_time = time.time() + rt_unequip
+                    else: # This 'else' corresponds to 'if not target_arg:'
+                        parts_equip = target_arg.split(" ", 1)
+                        item_query = parts_equip[0].lower() # item_query is already parts_equip[0].lower()
+                        slot_to_equip_to = parts_equip[1].lower().strip() if len(parts_equip) > 1 else None
+
+                        actual_item_id_to_equip = None
+                        item_query_lower = item_query # item_query is already lowercase from parts_equip[0].lower()
+
+                        # 1. Try to match by exact item_id ...
+                        if item_query_lower in player.inventory and GAME_ITEMS.get(item_query_lower):
+                            actual_item_id_to_equip = item_query_lower
+                            # ...
+                        
+                        # 2. If not found by ID, iterate inventory and try to match by name ...
+                        if not actual_item_id_to_equip:
+                            for item_id_in_inv in player.inventory:
+                                # ...
+                                if item_template_inv and item_template_inv.get("name", "").lower() == item_query_lower:
+                                    actual_item_id_to_equip = item_id_in_inv
+                                    # ...
+                                    break
+                        
+                        # 3. (Optional Advanced) If still not found, try matching by keywords
+                        if not actual_item_id_to_equip: # This 'if' is crucial
+                            for item_id_in_inv in player.inventory:
+                                # ...
+                                if item_template_inv:
+                                    keywords = [k.lower() for k in item_template_inv.get("keywords", [])]
+                                    if item_query_lower in keywords:
+                                        actual_item_id_to_equip = item_id_in_inv
+                                        # ...
+                                        break
+                        
+                        # This is the block that starts with the problematic 'elif' in your file
+                        if not actual_item_id_to_equip: # Check if item was found
+                            player.add_message(f"You don't have a '{parts_equip[0]}'.", "error")
+                        elif not slot_to_equip_to: # <<<< This is your line 792, now an 'elif'
+                            # Logic to infer slot if not provided
+                            item_template_for_slot = GAME_ITEMS.get(actual_item_id_to_equip)
+                            if item_template_for_slot:
+                                # ... (infer slot logic) ...
+                            else: # Should not happen if actual_item_id_to_equip is valid
+                                player.add_message("Item error (cannot infer slot).", "error_critical")
+                        
+                        # This 'if' should be at the same level as the 'if not actual_item_id_to_equip:' above
+                        if actual_item_id_to_equip and slot_to_equip_to: 
+                            if slot_to_equip_to not in config.EQUIPMENT_SLOTS:
+                                player.add_message(f"'{slot_to_equip_to}' is not a valid equipment slot. Valid slots: {', '.join(config.EQUIPMENT_SLOTS.keys())}", "error")
+                            elif hasattr(player, 'equip_item'):
+                                player.equip_item(actual_item_id_to_equip, slot_to_equip_to, GAME_ITEMS, GAME_RACES)
+                            else: player.add_message("Equipment system error.", "error_critical")
+                    player.next_action_time = time.time() + rt_equip # This indentation is for the outer 'else' of 'if not target_arg:'
+                
+                if verb == "loot":
+                    if not target_arg: # Simple "loot" command
+                        # TODO: Implement "loot last target" or "loot first corpse in room" logic
+                        # This requires tracking last_target or finding a corpse in current_room_data.objects
+                        # For now, treat it like "search" which requires a target
+                        player.add_message("Loot what? (e.g., loot corpse, loot rat corpse)", "error")
+                        action_taken = True # It's a recognized command, even if it needs args
+                        player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
+                    else: # "loot <target>" becomes "search <target>"
+                        verb = "search" # Internally redirect to search logic
+                        # The existing search logic will then handle target_arg
                 
                 elif verb == "search":
                     action_taken = True
@@ -819,27 +923,59 @@ def handle_player_command(data):
                         if obj_data:
                             target_display_name_search = obj_data.get("name", target_arg)
                             if obj_data.get("is_corpse"):
-                                if obj_data.get("searched_and_emptied"): # Check if already fully searched
-                                    player.add_message(f"The {target_display_name_search} has already been thoroughly searched and emptied.", "feedback_neutral")
+                                if obj_data.get("searched_and_emptied"):
+                                    player.add_message(f"The {target_display_name} has already been thoroughly searched and emptied.", "feedback_neutral")
                                 else:
-                                    corpse_inventory_ids = obj_data.get("inventory", [])
-                                    if corpse_inventory_ids:
-                                        player.add_message(f"You search the {target_display_name_search}...", "feedback_search_corpse")
-                                        items_moved_to_ground_names = []
-                                        for item_id_on_corpse in list(corpse_inventory_ids): # Iterate copy for safe removal
-                                            item_object_placed = add_item_object_to_room(current_room_data, item_id_on_corpse, GAME_ITEMS)
-                                            if item_object_placed:
-                                                items_moved_to_ground_names.append(item_object_placed.get("name", item_id_on_corpse))
-                                                if item_id_on_corpse in obj_data["inventory"]: # Remove from corpse's list
-                                                    obj_data["inventory"].remove(item_id_on_corpse)
-                                        if items_moved_to_ground_names:
-                                            player.add_message("...and its contents spill onto the ground:", "event_highlight")
-                                            for name_loot in items_moved_to_ground_names: player.add_message(f"- A {name_loot}", "feedback_loot_drop")
-                                        else: # No items were successfully moved (e.g., all invalid IDs)
-                                             player.add_message("...but find nothing of value that could be retrieved.", "feedback_search_empty")
-                                        obj_data["searched_and_emptied"] = True # Mark as fully searched
-                                        obj_data["description"] = f"The searched and looted remains of {obj_data.get('original_name', 'a creature')}." # Update corpse desc
-                                    else: # Corpse inventory was empty
+                                    player.add_message(f"You search the {target_display_name_search}...", "feedback_search_corpse")
+                                    items_moved_to_ground_names = []
+                                    corpse_inventory_ids = obj_data.get("inventory", []) # Original items on corpse
+
+                                    # --- Handle Gold ---
+                                    # Retrieve the original template to get gold_min/gold_max
+                                    # This assumes you stored the defeated entity's template or key somewhere accessible
+                                    # For simplicity, let's assume `obj_data` (the corpse object) now stores the original template key
+                                    original_template_key = obj_data.get("original_template_key") # You'll need to add this when creating corpse
+                                    original_template_type = obj_data.get("original_template_type") # "npc" or "monster"
+                                    defeated_entity_template_for_gold = None
+                                    if original_template_type == "npc":
+                                        defeated_entity_template_for_gold = GAME_NPCS.get(original_template_key)
+                                    elif original_template_type == "monster":
+                                        defeated_entity_template_for_gold = GAME_MONSTER_TEMPLATES.get(original_template_key)
+
+                                    if defeated_entity_template_for_gold:
+                                        gold_min = defeated_entity_template_for_gold.get("gold_min", 0)
+                                        gold_max = defeated_entity_template_for_gold.get("gold_max", 0)
+                                        if gold_max > 0: # Only roll if there's a potential for gold
+                                            rolled_gold = random.randint(gold_min, gold_max)
+                                            if rolled_gold > 0:
+                                                player.gold += rolled_gold
+                                                player.add_message(f"You find {rolled_gold} gold coins.", "feedback_loot_coins")
+                                                send_player_stats_update(player) # Update client gold display
+
+                                # --- Handle Items ---
+                                if corpse_inventory_ids:
+                                    player.add_message("It had the following items on it:", "event_highlight") # New header
+                                    for item_id_on_corpse in list(corpse_inventory_ids):
+                                        item_object_placed = add_item_object_to_room(current_room_data, item_id_on_corpse, GAME_ITEMS)
+                                        if item_object_placed:
+                                            items_moved_to_ground_names.append(item_object_placed.get("name", item_id_on_corpse))
+                                            # Message for each item found
+                                            player.add_message(f"- A {item_object_placed.get('name', item_id_on_corpse)}.", "feedback_loot_item")
+                                            if item_id_on_corpse in obj_data["inventory"]:
+                                                obj_data["inventory"].remove(item_id_on_corpse) # Remove from corpse internal list
+                                    if not items_moved_to_ground_names and not rolled_gold > 0: # if no actual items spilled and no gold
+                                        player.add_message("...but find nothing else of value.", "feedback_search_empty")
+
+                                elif not rolled_gold > 0 : # No items in inventory and no gold found
+                                    player.add_message("...but find nothing of value.", "feedback_search_empty")
+
+                                obj_data["searched_and_emptied"] = True # Mark as fully searched
+                                obj_data["description"] = f"The searched and looted remains of {obj_data.get('original_name', 'a creature')}."
+
+                                # Optionally, re-send room description if items actually spilled to ground
+                                if items_moved_to_ground_names:
+                                    send_room_description(player)
+                                else:
                                         player.add_message(f"You search the {target_display_name_search} but find nothing of value.", "feedback_search_empty")
                                         obj_data["searched_and_emptied"] = True
                             elif obj_data.get("actions") and "search" in obj_data.get("actions", {}):
@@ -1184,7 +1320,7 @@ def handle_player_command(data):
             print(f"CRITICAL: Error emitting critical error message to client {sid}: {e_emit}")
 
 
-            
+
 @app.route('/')
 def index_page():
     return render_template('index.html')

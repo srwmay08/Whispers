@@ -170,6 +170,8 @@ DEFAULT_NPCS_TEMPLATES = {
 
         "leaves_corpse": True,
         "loot_table_id": "timothy_town_crier_loot", 
+        "gold_min": 100,
+        "gold_max": 1000
     },
     "wandering_peddler_arya": {
         "_id": "wandering_peddler_arya", "name": "Arya the Wandering Peddler",

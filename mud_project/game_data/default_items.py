@@ -4,6 +4,32 @@
 # from .. import config # If config.py is one level up
 
 DEFAULT_ITEM_TEMPLATES = {
+    # ... your existing items ...
+    "crumpled_news_scroll": {
+        "_id": "crumpled_news_scroll",
+        "name": "Crumpled News Scroll",
+        "description": "A hastily written scroll with the latest (and perhaps embellished) news from around the region.",
+        "type": "readable", # or "junk", "note"
+        "slot": [], # Not equippable
+        "weight": 0.1, "value": 1, "rarity": "common",
+        "keywords": ["scroll", "news", "crumpled", "parchment"],
+        "droppable_on_death": True,
+        # "read_text": "Hear ye, hear ye! The price of ale is up again!" # Optional if readable
+    },
+    "small_pouch_coins": { # This item would represent a container of coins
+        "_id": "small_pouch_coins",
+        "name": "Small Pouch of Coins",
+        "description": "A small leather pouch, jingling faintly.",
+        "type": "currency_pouch", # A special type to indicate it contains gold
+        "slot": [],
+        "weight": 0.2, "value": 0, # The value is in the coins it yields
+        "rarity": "common",
+        "keywords": ["pouch", "coins", "money", "gold", "silver"],
+        "droppable_on_death": True,
+        # You might add min_gold/max_gold here if the pouch itself dictates the amount
+        "min_gold": 10,
+        "max_gold": 100,
+    },
     "rusty_sword": {
         "_id": "rusty_sword",
         "name": "Rusty Sword",

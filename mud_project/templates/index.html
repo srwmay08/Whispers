@@ -194,23 +194,37 @@
             });
         }
         
-        function displayRoomInfo(roomData) { 
-            if (!roomData || typeof roomData !== 'object') { 
+        function displayRoomInfo(roomData) {
+            if (!roomData || typeof roomData !== 'object') {
                 console.error("CLIENT: displayRoomInfo called with invalid data:", roomData);
                 addMessage("Error: Received invalid room data from server.", "error_critical");
                 return;
             }
+            // Display room name (already correct)
             appendOutput(createPrefixedMessageLine(`[${roomData.name || 'Unknown Room'}]`, 'room_name_line'));
+
+            // Display room description (already correct)
             const descDiv = document.createElement('div');
             descDiv.className = 'message-room_description';
             descDiv.textContent = roomData.description || 'No description available.';
             appendOutput(descDiv);
-            if (roomData.presence_summary && roomData.presence_summary.length > 0) { 
+
+            // Display presence summary (NPCs, other players, monsters - already correct)
+            if (roomData.presence_summary && roomData.presence_summary.length > 0) {
                 appendOutput(createPrefixedMessageLine(roomData.presence_summary, 'room_presence_line'));
             }
-            if (roomData.items && Array.isArray(roomData.items) && roomData.items.length > 0) {
-                appendOutput(createPrefixedMessageLine(`YOU ALSO SEE: ${roomData.items.join(', ')}.`, 'room_items_line'));
+
+            // CORRECTED: Display items summary (corpses, items on ground)
+            if (roomData.items_summary && roomData.items_summary.length > 0) { // Check for items_summary
+                // The items_summary from server is already formatted like "YOU ALSO SEE: Item A, Item B."
+                // So we don't need to add "YOU ALSO SEE:" again here.
+                // If your server does NOT include "YOU ALSO SEE:", then add it:
+                // appendOutput(createPrefixedMessageLine(`YOU ALSO SEE: ${roomData.items_summary}`, 'room_items_line'));
+                // If your server already includes it:
+                appendOutput(createPrefixedMessageLine(roomData.items_summary, 'room_items_line'));
             }
+
+            // Display exits (already correct)
             appendOutput(createPrefixedMessageLine(`OBVIOUS EXITS: ${roomData.exits || 'None'}`, 'room_exits_line'));
         }
 

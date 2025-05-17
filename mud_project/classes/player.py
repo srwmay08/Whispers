@@ -33,6 +33,8 @@ class Player:
         self.creation_data = {}
         self.pronouns = {}
         self.race = None # Stores the race key (e.g., "human")
+        self.gold = 0
+
 
         self.stats = {stat_name: getattr(config, 'DEFAULT_STAT_VALUE', 10) for stat_name in getattr(config, 'ALL_STATS_ORDERED', [])}
         self.skills = getattr(config, 'INITIAL_SKILLS', {}).copy()
@@ -252,21 +254,29 @@ class Player:
 
 
     def equip_item(self, item_id_to_equip: str, target_slot_key: str, game_items_data: dict, game_races_data=None):
+        if config.DEBUG_MODE: print(f"DEBUG EQUIP: Attempting to equip '{item_id_to_equip}' to slot '{target_slot_key}'")
         if item_id_to_equip not in self.inventory:
             self.add_message(f"You don't have '{game_items_data.get(item_id_to_equip, {}).get('name', item_id_to_equip)}' to equip.", "error")
+            if config.DEBUG_MODE: print(f"DEBUG EQUIP: Fail - Not in inventory.")
             return False
         item_template = game_items_data.get(item_id_to_equip)
         if not item_template:
-            self.add_message(f"Cannot find item data for '{item_id_to_equip}'.", "error_critical"); return False
+            self.add_message(f"Cannot find item data for '{item_id_to_equip}'.", "error_critical")
+            if config.DEBUG_MODE: print(f"DEBUG EQUIP: Fail - No item template.")
+            return False
 
         item_allowed_slots = item_template.get("slot", [])
         if not isinstance(item_allowed_slots, list): item_allowed_slots = [item_allowed_slots]
-        if target_slot_key not in config.EQUIPMENT_SLOTS.keys():
-            self.add_message(f"Invalid equipment slot key: {target_slot_key}.", "error"); return False
-        
+        if target_slot_key not in config.EQUIPMENT_SLOTS.keys(): # Check against actual slot keys
+            self.add_message(f"Invalid equipment slot key: {target_slot_key}.", "error")
+            if config.DEBUG_MODE: print(f"DEBUG EQUIP: Fail - Invalid target_slot_key '{target_slot_key}'.")
+            return False
+
         actual_slot_name_for_msg = config.EQUIPMENT_SLOTS.get(target_slot_key, target_slot_key)
         if target_slot_key not in item_allowed_slots:
-            self.add_message(f"The {item_template.get('name', 'item')} cannot be equipped to {actual_slot_name_for_msg}.", "error"); return False
+            self.add_message(f"The {item_template.get('name', 'item')} cannot be equipped to {actual_slot_name_for_msg}.", "error")
+            if config.DEBUG_MODE: print(f"DEBUG EQUIP: Fail - Item cannot go in slot. Item slots: {item_allowed_slots}")
+            return False
 
         currently_equipped_id = self.equipped_items.get(target_slot_key)
         if currently_equipped_id: self.unequip_item(target_slot_key, game_items_data, game_races_data, silent=True)
