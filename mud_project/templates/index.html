@@ -233,15 +233,23 @@
                 appendOutput(presenceDiv);
             }
             
-            console.log("Client received items_summary:", roomData.items_summary); // <-- ADD THIS DEBUG LINE
-
-            console.log("CLIENT: Received items_summary string from server:", roomData.items_summary);
-            let shouldDisplayItems = (roomData.items_summary && roomData.items_summary.length > 0);
-            console.log("CLIENT: Condition to display items_summary (shouldDisplayItems):", shouldDisplayItems);
+            console.log("CLIENT DEBUG: Raw items_summary from roomData:", roomData.items_summary);
+            let shouldDisplayItems = false; // Default to false
+            if (roomData.items_summary) { // Check if it exists first
+                console.log("CLIENT DEBUG: items_summary exists. Length:", roomData.items_summary.length);
+                if (roomData.items_summary.length > 0) {
+                    shouldDisplayItems = true;
+                }
+            }
+            console.log("CLIENT DEBUG: Condition to display items_summary (shouldDisplayItems):", shouldDisplayItems);
 
             if (shouldDisplayItems) {
-                console.log("CLIENT: Attempting to append items_summary line:", roomData.items_summary); // Important log
+                console.log("CLIENT DEBUG: ATTEMPTING TO APPEND items_summary line:", roomData.items_summary);
                 appendOutput(createPrefixedMessageLine(roomData.items_summary, 'room_items_line'));
+            } else if (roomData.items_summary === "") { // Explicitly check for empty string
+                console.log("CLIENT DEBUG: items_summary is an empty string. Not displaying 'YOU ALSO SEE'.");
+            } else {
+                console.log("CLIENT DEBUG: items_summary is falsy or length 0. Not displaying 'YOU ALSO SEE'. Value:", roomData.items_summary);
             }
 
             // Display items summary (YOU ALSO SEE) without ">"
