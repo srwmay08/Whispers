@@ -328,14 +328,29 @@ def send_room_description(player_object: player_class.Player):
 # (This is the function from the previous turn, ID: main_py_handle_command_update_v6)
 # Ensure this is fully integrated here.
 @socketio.on('connect')
-def handle_connect():
+def handle_connect(*args): # Add *args to accept any positional arguments
     sid = request.sid
-    if config.DEBUG_MODE: print(f"DEBUG: Client connected: SID {sid}") # Verify this logs for each attempt
-    player_creation_sessions[sid] = { "phase": "awaiting_login_name", "sid": sid, "messages_queue": [], "player_shell": None }
-    # This emit is critical
-    emit('game_messages', { 'messages': [{"text": getattr(config, 'WELCOME_MESSAGE', "Welcome!"), "type": "system_highlight"}, {"text": "Enter 'login <name>' or 'create <name>'", "type": "prompt"}] }, room=sid)
-    if config.DEBUG_MODE: print(f"DEBUG: Emitted initial game_messages to SID {sid}") # Add this for confirmation
+    if config.DEBUG_MODE: 
+        print(f"DEBUG: Client connected: SID {sid}")
+        if args:
+            print(f"DEBUG: handle_connect received args: {args}") # Log if any args are passed
 
+    player_creation_sessions[sid] = { 
+        "phase": "awaiting_login_name", 
+        "sid": sid, 
+        "messages_queue": [], 
+        "player_shell": None 
+    }
+
+    emit('game_messages', { 
+        'messages': [
+            {"text": getattr(config, 'WELCOME_MESSAGE', "Welcome!"), "type": "system_highlight"},
+            {"text": "Enter 'login <name>' or 'create <name>'", "type": "prompt"}
+        ] 
+    }, room=sid)
+
+    if config.DEBUG_MODE: 
+        print(f"DEBUG: Emitted initial game_messages to SID {sid}")
     try:
         player = active_players.get(sid)
         session = player_creation_sessions.get(sid)
