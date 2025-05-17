@@ -10,6 +10,7 @@ DEFAULT_ITEM_TEMPLATES = {
         "description": "A pitted and worn sword...",
         "type": "weapon",
         "slot": ["mainhand", "offhand"], # Validated against config.EQUIPMENT_SLOTS keys
+        "occupies_slots": ["none"],
         "skill": "edged_weapons", 
         "damage": "1d4",          
         "weapon_as_bonus": -2,
@@ -25,6 +26,7 @@ DEFAULT_ITEM_TEMPLATES = {
         "description": "A simple tunic made of coarse, faded fabric.",
         "type": "armor",
         "slot": ["torso"], # Use a key from EQUIPMENT_SLOTS, e.g., config.EQUIPMENT_SLOTS["torso"]
+        "occupies_slots": ["torso"],
         "armor_type": "cloth",   # Crucial for combat calculations
         "armor_ds_bonus": 3,     
         "enchantment_ds_bonus": 0,
@@ -54,6 +56,7 @@ DEFAULT_ITEM_TEMPLATES = {
         "description": "A crudely stitched jerkin of various animal hides and rags.",
         "type": "armor",
         "slot": ["torso"],
+        "occupies_slots": ["torso"],
         "armor_type": "leather", # Treat as light leather
         "armor_ds_bonus": 4,
         "enchantment_ds_bonus": 0,
@@ -97,6 +100,7 @@ DEFAULT_ITEM_TEMPLATES = {
         "description": "Standard issue armor for Oakhaven guards, made of hardened leather.",
         "type": "armor",
         "slot": ["torso"],
+        "occupies_slots": ["torso"],
         "armor_type": "leather",
         "armor_ds_bonus": 8, # Example value
         "enchantment_ds_bonus": 0,

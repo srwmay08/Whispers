@@ -38,7 +38,7 @@ class Player:
         self.skills = getattr(config, 'INITIAL_SKILLS', {}).copy()
         
         self.inventory = [] 
-        self.equipped_items = {slot_key: None for slot_key in config.EQUIPMENT_SLOTS.keys()}
+        self.equipped_items = {slot_key: [] for slot_key in config.EQUIPMENT_SLOTS.keys()}
         
         self.current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1)
         self.hp = 0; self.max_hp = 0; self.mp = 0; self.max_mp = 0; self.sp = 0; self.max_sp = 0

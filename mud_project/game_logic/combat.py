@@ -171,9 +171,9 @@ def calculate_defense_strength(defender_name, defender_stats, defender_skills, a
     return ds_val
 
 
-def handle_player_attack(player: player_class.Player, target_data: dict, target_type: str, 
-                         target_name_raw_from_player: str, game_items_global: dict, 
-                         monster_instance_index: int | None = None):
+def handle_player_attack(player: player_class.Player, target_data: dict, target_type: str,
+                         target_name_raw_from_player: str, game_items_global: dict,
+                         monster_runtime_id: str | None = None): # Parameter name changed
     GAME_ITEMS = game_items_global # Make it available locally
 
     template_key = target_data.get("_id", target_data.get("key", "unknown_key"))

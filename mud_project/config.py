@@ -857,6 +857,41 @@ EQUIPMENT_SLOTS = {
     "undershirt": "Undershirt",      # 23
     "leggings_under": "Leggings (Under)",# 24
 
+}
+
+EQUIPMENT_SLOT_CAPACITY = {
+
+    # Combat specific slots (often distinct from armor/clothing slots)
+    "mainhand": 1,
+    "offhand": 1,
+
+    # --- ARMOR SPECIFIC ---
+    "legs_upper": 1, # 7 (Pants, Trousers) - Main leg armor
+    "torso": 1,               # 8 (Shirt, Tunic, Breastplate) - Main body armor
+    "arms": 1,                 # 14 (Sleeves, Armguards if separate)
+    "legs_attached": 1, # 15 (Greaves, Shin Guards - if separate from upper)
+    "hands_gloves": 1,# 20 (Gloves, Gauntlets)
+    "feet_boots": 1,  # 11 (Boots, Shoes) - Main footwear
+    "trinket_pin": 1000, # 1
+    "back": 3,                 # 2 (Cloak, Backpack)
+    "waist_sash": 3,          # 3 (Sash, secondary belt)
+    "head": 1,                 # 4
+    "shoulder_slung_l": 2, # 5.1 (Bandolier, Quiver Strap)
+    "shoulder_slung_r": 2, # 5.2 (Bandolier, Quiver Strap)
+    "shoulders_draped": 1, # 6 (Mantle, Shawl)
+    "wrists": 2,              # 9 (Bracers - plural for both)
+    "finger_l": 5,    # 10 (Left Hand Finger)
+    "finger_r": 5,   # 10 (Right Hand Finger)
+    "feet_slipon": 1, # 21 (Sandals, Slippers - alternative footwear)
+    "neck": 2,                 # 12 (Amulet)
+    "belt": 1,                 # 13 (Main Belt)
+    "ear_l": 2,      # 16
+    "ear_r": 2,     # 17 (Assuming two distinct earring slots)
+    "ankles": 2,              # 18 (Anklets - plural for both)
+    "front_worn": 1,   # 19 (Tabard, Apron)
+    "hair_adorn": 2, # 22
+    "undershirt": 1,      # 23
+    "leggings_under": 1, # 24
 
 }
 # A simplified list for common usage, ensure your items use these keys:
