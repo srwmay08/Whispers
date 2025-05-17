@@ -160,6 +160,116 @@ DEFAULT_ITEM_TEMPLATES = {
         "weight": 6, "value": 18, "rarity": "common",
         "keywords": ["shield", "oakhaven", "guard"],
         "droppable_on_death": True
+    },
+    "goblin_shiv": {
+        "_id": "goblin_shiv",
+        "name": "Goblin Shiv",
+        "description": "A nasty-looking, sharpened piece of scrap metal. Clearly of goblin make.",
+        "type": "weapon",
+        "slot": ["mainhand", "offhand"],
+        "skill": "edged_weapons", # Or perhaps "brawling" if it's very crude
+        "damage": "1d4-1", # Worse than a proper dagger
+        "weapon_as_bonus": -1,
+        "enchantment_as_bonus": 0,
+        "avd_modifiers": {"unarmored": 2, "cloth": 1, "leather": 0, "chain": -3, "plate": -6},
+        "weight": 0.5, "value": 1, "rarity": "trash",
+        "keywords": ["shiv", "goblin", "dagger", "crude", "weapon", "edged"],
+        "droppable_on_death": True
+    },
+    "arrow_bundle_crude": {
+        "_id": "arrow_bundle_crude",
+        "name": "Bundle of Crude Arrows",
+        "description": "A small bundle of poorly fletched arrows with sharpened wooden or bone tips.",
+        "type": "ammunition_bundle", # Special type to indicate it yields multiple arrows
+        "slot": [], # Not equippable directly
+        "weight": 0.5, "value": 2, "rarity": "common",
+        "keywords": ["arrows", "bundle", "crude", "ammunition", "ammo"],
+        "droppable_on_death": True,
+        "yields_item_id": "arrow_crude", # The ID of the individual arrow item
+        "yields_quantity_min": 3,
+        "yields_quantity_max": 8
+    },
+    "arrow_crude": { # Individual arrow, not directly in loot tables but yielded by bundle
+        "_id": "arrow_crude",
+        "name": "Crude Arrow",
+        "description": "A poorly made arrow, likely to break on impact.",
+        "type": "ammunition",
+        "slot": [],
+        "weight": 0.05, "value": 0, "rarity": "trash", # Individual arrows often have no value
+        "keywords": ["arrow", "crude", "ammunition", "ammo"],
+        "droppable_on_death": True # If a player has individual arrows
+    },
+    "moldy_bread": {
+        "_id": "moldy_bread",
+        "name": "Moldy Bread",
+        "description": "A hunk of bread with visible patches of green and blue mold. Smells terrible.",
+        "type": "food", # Or "junk"
+        "slot": [],
+        "weight": 0.3, "value": 0, "rarity": "trash",
+        "keywords": ["bread", "moldy", "food", "stale"],
+        "droppable_on_death": True,
+        # "effects_on_consume": [{"type": "damage", "amount": "1d2", "damage_type": "poison"}, {"type": "status", "status_id": "nausea", "duration": 60}] # Example
+    },
+    "rat_tail": {
+        "_id": "rat_tail",
+        "name": "Rat Tail",
+        "description": "The severed tail of a giant rat. Surprisingly tough.",
+        "type": "crafting_material", # Or "junk", "trophy"
+        "slot": [],
+        "weight": 0.1, "value": 1, "rarity": "common",
+        "keywords": ["rat", "tail", "trophy", "vermin"],
+        "droppable_on_death": True
+    },
+    "ruined_pelt": {
+        "_id": "ruined_pelt",
+        "name": "Ruined Pelt",
+        "description": "A tattered and torn piece of animal hide, mostly useless due to poor skinning or damage.",
+        "type": "junk", # Or "crafting_material_poor"
+        "slot": [],
+        "weight": 0.5, "value": 0, "rarity": "trash",
+        "keywords": ["pelt", "hide", "ruined", "tattered", "fur"],
+        "droppable_on_death": True
+    },
+     "rat_pelt_clean": {
+        "_id": "rat_pelt_clean",
+        "name": "Clean Rat Pelt",
+        "description": "The surprisingly intact pelt of a giant rat, carefully skinned.",
+        "type": "crafting_material", 
+        "slot": [],
+        "weight": 0.4, "value": 3, "rarity": "common",
+        "keywords": ["pelt", "hide", "rat", "fur", "clean"],
+        "droppable_on_death": True
+    },
+    "small_bones": {
+        "_id": "small_bones",
+        "name": "Small Bones",
+        "description": "A handful of small, unremarkable animal bones.",
+        "type": "crafting_material", # Or "junk"
+        "slot": [],
+        "weight": 0.3, "value": 1, "rarity": "common",
+        "keywords": ["bones", "small", "fragments"],
+        "droppable_on_death": True
+    },
+    "kobold_scales_patch": {
+        "_id": "kobold_scales_patch",
+        "name": "Patch of Kobold Scales",
+        "description": "A small patch of dull, reptilian scales, likely from a kobold.",
+        "type": "crafting_material",
+        "slot": [],
+        "weight": 0.2, "value": 2, "rarity": "common",
+        "keywords": ["scales", "kobold", "hide", "patch"],
+        "droppable_on_death": True
+    },
+    "tarnished_locket": { # From room 17
+        "_id": "tarnished_locket",
+        "name": "Tarnished Locket",
+        "description": "A small, heart-shaped locket, its silver surface heavily tarnished. It might once have held a portrait.",
+        "type": "trinket", # or "jewelry"
+        "slot": ["neck"], # Can be worn
+        "weight": 0.1, "value": 10, "rarity": "uncommon",
+        "keywords": ["locket", "tarnished", "jewelry", "heart", "necklace"],
+        "droppable_on_death": True,
+        "look_description_ground": "A small, tarnished locket lies here, glinting faintly.",
+        # "stat_bonuses": {"charisma": 1} # Example if it had a minor bonus
     }
-    # ... and so on for all your other items
 }
