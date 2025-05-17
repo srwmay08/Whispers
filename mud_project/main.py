@@ -586,7 +586,6 @@ def handle_player_command(data):
                         return
                     send_room_description(player)
                 
-                # Check for custom object actions first
                 if current_room_data and not action_taken:
                     for obj_id, obj_data in current_room_data.get("objects", {}).items():
                         if obj_data.get("interactable") and isinstance(obj_data.get("actions"), dict):
@@ -624,7 +623,7 @@ def handle_player_command(data):
                     if config.DEBUG_MODE: print(f"DEBUG CMD PARSED (Fallback): Verb='{verb}', TargetArg='{target_arg}' (RawInputTarget='{raw_target_arg}')")
 
                     if verb == "look" or verb == "l" or verb == "examine" or verb == "ex" or verb == "exa":
-                        action_taken = True
+                        action_taken = True # ... (rest of look logic remains the same) ...
                         rt_look_cmd = config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
                         if target_arg and current_room_data:
                             target_entity_data_look, entity_type_look, _, _ = find_combat_target_in_room(player, target_arg, current_room_data)
@@ -647,8 +646,10 @@ def handle_player_command(data):
                         else: send_room_description(player) 
                         player.next_action_time = time.time() + rt_look_cmd
 
+
                     elif current_room_data and verb in current_room_data.get("exits", {}):
-                        action_taken = True; destination_room_id = current_room_data["exits"][verb]
+                        action_taken = True # ... (rest of movement logic remains the same) ...
+                        destination_room_id = current_room_data["exits"][verb]
                         player_name_for_broadcast = player.name if hasattr(player, 'name') else "Someone"
                         player.add_message(f"You move {verb}.", "feedback_move")
                         broadcast_to_room(room_id_before_move, f"{player_name_for_broadcast} leaves heading {verb}.", "ambient_player_departure", [sid])
@@ -662,7 +663,8 @@ def handle_player_command(data):
                         player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_move', 0.5)
                     
                     elif verb == "attack":
-                        action_taken = True; rt_look = config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2); rt_attack = config.ROUNDTIME_DEFAULTS.get('roundtime_attack', 3.0)
+                        action_taken = True # ... (rest of attack logic remains the same) ...
+                        rt_look = config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2); rt_attack = config.ROUNDTIME_DEFAULTS.get('roundtime_attack', 3.0)
                         if not target_arg: player.add_message("Attack whom or what?", "error"); player.next_action_time = time.time() + rt_look
                         elif not current_room_data: player.add_message("You can't attack in the void.", "error"); player.next_action_time = time.time() + rt_look
                         else:
@@ -707,25 +709,43 @@ def handle_player_command(data):
                                 if obj_data.get("is_corpse"):
                                     if obj_data.get("searched_and_emptied"): player.add_message(f"The {target_display_name_search} has already been searched.", "feedback_neutral")
                                     else:
-                                        corpse_inv_ids = obj_data.get("inventory", [])
-                                        if corpse_inv_ids:
-                                            player.add_message(f"You search the {target_display_name_search}...", "feedback_search_corpse"); items_moved = []
-                                            for item_id_corp in list(corpse_inv_ids): item_obj_placed = add_item_object_to_room(current_room_data, item_id_corp, GAME_ITEMS);                                             
-                                            if item_obj_placed: items_moved.append(item_obj_placed.get("name", item_id_corp))
-                                            obj_data["inventory"] = []
-                                            if items_moved: player.add_message("...and its contents spill onto the ground:", "event_highlight");                                             
-                                            for name_loot in items_moved: player.add_message(f"- A {name_loot}", "feedback_loot_drop")
-                                            else: player.add_message("...but find nothing retrievable.", "feedback_search_empty")
+                                        corpse_inventory_ids = obj_data.get("inventory", [])
+                                        if config.DEBUG_MODE: print(f"DEBUG SEARCH: Corpse inventory IDs: {corpse_inventory_ids}")
+                                        
+                                        if corpse_inventory_ids:
+                                            player.add_message(f"You search the {target_display_name_search}...", "feedback_search_corpse"); 
+                                            items_moved_to_ground_names = []
+                                            
+                                            for item_id_on_corpse in list(corpse_inventory_ids): 
+                                                if config.DEBUG_MODE: print(f"DEBUG SEARCH: Processing item '{item_id_on_corpse}' from corpse.")
+                                                item_object_placed = add_item_object_to_room(current_room_data, item_id_on_corpse, GAME_ITEMS)                                             
+                                                if item_object_placed: 
+                                                    items_moved_to_ground_names.append(item_object_placed.get("name", item_id_on_corpse))
+                                                    if config.DEBUG_MODE: print(f"DEBUG SEARCH: Item '{item_id_on_corpse}' successfully added to room, name '{item_object_placed.get('name')}' added to spill list.")
+                                                elif config.DEBUG_MODE: print(f"DEBUG SEARCH: Item '{item_id_on_corpse}' FAILED to be added to room (add_item_object_to_room returned None).")
+                                            
+                                            obj_data["inventory"] = [] # Empty corpse inventory after processing
+                                            
+                                            if items_moved_to_ground_names: 
+                                                player.add_message("...and its contents spill onto the ground:", "event_highlight");                                             
+                                                for name_loot in items_moved_to_ground_names: player.add_message(f"- A {name_loot}", "feedback_loot_drop")
+                                            else: 
+                                                # This message now means either the corpse was empty OR items failed to be added to room
+                                                player.add_message("...but find nothing retrievable.", "feedback_search_empty")
+                                                if config.DEBUG_MODE and corpse_inventory_ids: # Log if corpse had items but nothing spilled
+                                                    print(f"DEBUG SEARCH: Corpse had items {corpse_inventory_ids} but items_moved_to_ground_names was empty.")
+
                                             obj_data["searched_and_emptied"] = True; obj_data["description"] = f"The searched remains of {obj_data.get('original_name', 'a creature')}."
                                             if obj_id in current_room_data.get("objects", {}): del current_room_data["objects"][obj_id];                                             
                                             if config.DEBUG_MODE: print(f"DEBUG SEARCH: Corpse '{obj_id}' removed."); broadcast_to_room(player.current_room_id, f"The {target_display_name_search} crumbles to dust.", "ambient_neutral", [sid])
-                                        else:
+                                        else: # Corpse inventory was initially empty
                                             player.add_message(f"You search the {target_display_name_search} but find nothing.", "feedback_search_empty"); obj_data["searched_and_emptied"] = True
                                             if obj_id in current_room_data.get("objects", {}): del current_room_data["objects"][obj_id];                                             
                                             if config.DEBUG_MODE: print(f"DEBUG SEARCH: Empty corpse '{obj_id}' removed."); broadcast_to_room(player.current_room_id, f"The {target_display_name_search} crumbles to dust.", "ambient_neutral", [sid])
                                 elif obj_data.get("is_container") and not obj_data.get("is_ground_item"): 
+                                    # ... (container search logic - ensure similar debugging if issues arise) ...
                                     if obj_data.get("searched_and_emptied"): player.add_message(f"The {target_display_name_search} appears empty.", "feedback_neutral")
-                                    else: # Simplified: container items go to ground
+                                    else: 
                                         container_inv = obj_data.get("inventory", []); items_moved = []
                                         if container_inv: player.add_message(f"You search the {target_display_name_search}...", "feedback_search_corpse")
                                         for item_id_cont in list(container_inv): item_obj_placed = add_item_object_to_room(current_room_data, item_id_cont, GAME_ITEMS);                                         
@@ -739,63 +759,45 @@ def handle_player_command(data):
                             else: player.add_message(f"You don't see '{target_arg}' to search here.", "error")
                         player.next_action_time = time.time() + final_search_rt
 
-                    # --- ADDED 'skin' VERB ---
                     elif verb == "skin":
-                        action_taken = True
-                        rt_skin = getattr(config, 'SKIN_BASE_ROUNDTIME', 2.0) # Example round time
-                        player.next_action_time = time.time() + rt_skin
-
-                        if not target_arg:
-                            player.add_message("Skin what?", "error")
-                        elif not current_room_data:
-                            player.add_message("There's nothing here to skin.", "error")
+                        action_taken = True; rt_skin = getattr(config, 'SKIN_BASE_ROUNDTIME', 2.0); player.next_action_time = time.time() + rt_skin
+                        if not target_arg: player.add_message("Skin what?", "error")
+                        elif not current_room_data: player.add_message("There's nothing here to skin.", "error")
                         else:
                             obj_id, obj_data = find_object_in_room(player, target_arg, current_room_data)
                             if obj_data and obj_data.get("is_corpse"):
                                 corpse_name_skin = obj_data.get("name", "corpse")
-                                if obj_data.get("skinned"):
-                                    player.add_message(f"The {corpse_name_skin} has already been skinned.", "feedback_neutral")
+                                if obj_data.get("skinned"): player.add_message(f"The {corpse_name_skin} has already been skinned.", "feedback_neutral")
                                 else:
-                                    # Need the original monster template to check skinnable properties
-                                    # This assumes the corpse_id contains the original monster's runtime_id
-                                    # which might then be used to find its template_key if stored in TRACKED_DEFEATED_ENTITIES
-                                    # For simplicity, let's assume corpse_data might store original_template_key
-                                    original_template_key = obj_data.get("original_template_key") # You'll need to add this to corpse_data
+                                    original_template_key = obj_data.get("original_template_key")
+                                    if config.DEBUG_MODE: print(f"DEBUG SKIN: Corpse obj_data: {obj_data}, trying to get original_template_key: '{original_template_key}'")
                                     monster_template = None
-                                    if original_template_key:
-                                        monster_template = GAME_MONSTER_TEMPLATES.get(original_template_key)
+                                    if original_template_key: monster_template = GAME_MONSTER_TEMPLATES.get(original_template_key)
+                                    else: player.add_message(f"Error: Could not identify original creature for {corpse_name_skin}.", "error_critical")
                                     
                                     if monster_template and monster_template.get("skinnable"):
                                         player_skill_value = player.skills.get(monster_template.get("skinning", {}).get("skill_required", "survival"), 0)
-                                        
+                                        if config.DEBUG_MODE: print(f"DEBUG SKIN: Player skill '{monster_template.get('skinning', {}).get('skill_required', 'survival')}' value: {player_skill_value}")
                                         skinned_item_ids = loot_handler.generate_skinning_loot(monster_template, player_skill_value, GAME_ITEMS)
-                                        
                                         if skinned_item_ids:
                                             player.add_message(f"You attempt to skin the {corpse_name_skin}...", "feedback_action")
                                             for item_id_skinned in skinned_item_ids:
-                                                # Add to player inventory or ground
                                                 if len(player.inventory) < getattr(config, 'MAX_INVENTORY_SIZE', 20):
-                                                    player.inventory.append(item_id_skinned)
-                                                    player.add_message(f"You obtain: {GAME_ITEMS.get(item_id_skinned, {}).get('name', item_id_skinned)}.", "feedback_get_item")
+                                                    player.inventory.append(item_id_skinned); player.add_message(f"You obtain: {GAME_ITEMS.get(item_id_skinned, {}).get('name', item_id_skinned)}.", "feedback_get_item")
                                                 else:
-                                                    add_item_object_to_room(current_room_data, item_id_skinned, GAME_ITEMS)
-                                                    player.add_message(f"{GAME_ITEMS.get(item_id_skinned, {}).get('name', item_id_skinned)} falls to the ground (inventory full).", "feedback_neutral")
-                                            obj_data["skinned"] = True
-                                            obj_data["description"] = f"The skinned remains of {obj_data.get('original_name', 'a creature')}." # Update description
-                                        else: # Failed skinning or no yield
+                                                    add_item_object_to_room(current_room_data, item_id_skinned, GAME_ITEMS); player.add_message(f"{GAME_ITEMS.get(item_id_skinned, {}).get('name', item_id_skinned)} falls to the ground (inventory full).", "feedback_neutral")
+                                            obj_data["skinned"] = True; obj_data["description"] = f"The skinned remains of {obj_data.get('original_name', 'a creature')}."
+                                        else: 
                                             skinning_failure_msg = monster_template.get("skinning",{}).get("failure_message", "You fail to get anything useful from skinning the {monster_name}.")
                                             player.add_message(skinning_failure_msg.format(monster_name=corpse_name_skin), "feedback_neutral")
-                                            # Optionally, still mark as skinned to prevent repeated attempts on failure
-                                            obj_data["skinned"] = True 
-                                            obj_data["description"] = f"The mangled remains of {obj_data.get('original_name', 'a creature')} after a failed skinning attempt."
-                                    else:
-                                        player.add_message(f"You cannot skin the {corpse_name_skin}.", "error")
-                            else:
-                                player.add_message(f"You don't see '{target_arg}' (a skinnable corpse) here.", "error")
-                    # --- END 'skin' VERB ---
-
+                                            obj_data["skinned"] = True; obj_data["description"] = f"The mangled remains of {obj_data.get('original_name', 'a creature')} after a failed skinning attempt."
+                                    elif monster_template: player.add_message(f"The {corpse_name_skin} is not something you can skin.", "error")
+                                    # If monster_template was None, error was already sent.
+                            else: player.add_message(f"You don't see '{target_arg}' (a skinnable corpse) here.", "error")
+                    
                     elif verb in ["get", "take"]:
-                        action_taken = True; rt_get_default = getattr(config, 'GET_BASE_ROUNDTIME', 0.5); player.next_action_time = time.time() + rt_get_default
+                        action_taken = True # ... (rest of get logic remains the same) ...
+                        rt_get_default = getattr(config, 'GET_BASE_ROUNDTIME', 0.5); player.next_action_time = time.time() + rt_get_default
                         if not target_arg: player.add_message(f"{verb.capitalize()} what?", "error")
                         elif not current_room_data: player.add_message("There's nothing here to get.", "error")
                         else:
@@ -825,8 +827,10 @@ def handle_player_command(data):
                                 elif can_take and not item_id_for_inventory: player.add_message("Error: Item ID missing for pickup.", "error_critical")
                             else: player.add_message(f"You don't see '{item_name_query_get}' here to {verb}.", "error")
 
+
                     elif verb == "equip" or verb == "wear":
-                        action_taken = True; rt_equip = config.ROUNDTIME_DEFAULTS.get('roundtime_action_short', 1.0); player.next_action_time = time.time() + rt_equip
+                        action_taken = True # ... (rest of equip logic remains the same) ...
+                        rt_equip = config.ROUNDTIME_DEFAULTS.get('roundtime_action_short', 1.0); player.next_action_time = time.time() + rt_equip
                         if not target_arg: player.add_message(f"{verb.capitalize()} what? (e.g., {verb} rusty_sword mainhand)", "error")
                         else:
                             target_arg_parts = target_arg.split(); item_name_or_id_query_equip = ""; slot_to_equip_to_query = None
@@ -864,9 +868,43 @@ def handle_player_command(data):
                                         success = player.equip_item(actual_item_id_to_equip, final_slot_to_equip, GAME_ITEMS, GAME_RACES)
                                         if success: broadcast_to_room(player.current_room_id, f"{player.name} equips a {GAME_ITEMS.get(actual_item_id_to_equip,{}).get('name','piece of equipment')}.", "ambient_other_player", [sid])
                                     else: player.add_message("Equipment system error.", "error_critical")
+
+                    # --- ADDED 'unequip' VERB ---
+                    elif verb == "unequip" or verb == "remove":
+                        action_taken = True
+                        rt_unequip = config.ROUNDTIME_DEFAULTS.get('roundtime_action_short', 1.0)
+                        player.next_action_time = time.time() + rt_unequip
+                        if not target_arg:
+                            player.add_message(f"{verb.capitalize()} what? (e.g., {verb} rusty_sword or {verb} mainhand)", "error")
+                        else:
+                            item_or_slot_query = target_arg.lower()
+                            slot_to_unequip_from = None
+                            
+                            # Check if target_arg is a direct slot key
+                            if item_or_slot_query in config.EQUIPMENT_SLOTS.keys():
+                                slot_to_unequip_from = item_or_slot_query
+                            else: # Assume target_arg is an item name/keyword
+                                for slot_key, item_id in player.equipped_items.items():
+                                    if item_id:
+                                        item_template = GAME_ITEMS.get(item_id)
+                                        if item_template:
+                                            if item_template.get("name","").lower() == item_or_slot_query or \
+                                               item_or_slot_query in [k.lower() for k in item_template.get("keywords",[])] or \
+                                               item_id.lower() == item_or_slot_query:
+                                                slot_to_unequip_from = slot_key
+                                                break
+                            
+                            if slot_to_unequip_from:
+                                success = player.unequip_item(slot_to_unequip_from, GAME_ITEMS, GAME_RACES)
+                                if success: # player.unequip_item sends its own messages
+                                    broadcast_to_room(player.current_room_id, f"{player.name} unequips an item.", "ambient_other_player", [sid])
+                                # else: player.unequip_item already sent an error message
+                            else:
+                                player.add_message(f"You don't have '{target_arg}' equipped or it's not a valid slot.", "error")
+                    # --- END 'unequip' VERB ---
                     
                     elif verb == "inventory" or verb == "i": 
-                        action_taken = True
+                        action_taken = True # ... (rest of inventory logic remains the same) ...
                         if player.inventory:
                             player.add_message("--- Your Inventory ---", "header_info_block"); item_counts = {}; 
                             for item_id_inv in player.inventory: item_counts[item_id_inv] = item_counts.get(item_id_inv, 0) + 1
@@ -886,6 +924,7 @@ def handle_player_command(data):
             send_player_stats_update(player)
 
         elif session: 
+            # ... (character creation logic remains the same) ...
             player_shell = session.get("player_shell"); current_phase = session.get("phase")
             def send_creation_messages(s_id, sess, p_shell):
                 messages_to_client = []
