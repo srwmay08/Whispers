@@ -275,7 +275,7 @@ DEFAULT_ROOMS = {
     # Room 9 (Well Bottom)
     9: { "id": 9, "name": "Well Bottom - Cistern Antechamber", "occupancy": 30,
         "tags": ["underground", "cistern", "dark", "dungeon_entrance"],
-        "searching": True, "hiding": True, "pvp": False, "shouting": True,
+        "searching": True, "hiding": True, "pvp": True, "shouting": True,
         "is_outdoor": False, "is_underground": True,
         "xp_modifier": 2.5, "is_node": True, "xp_absorbtion_modifier": 1.0,
         "description": "You land with a jarring thud on the cold, damp stone floor, the impact stealing your breath for a moment. The air is heavy, cool, and smells strongly of stagnant water, wet earth, and something vaguely unpleasant, perhaps mildew or decay. Utter darkness presses in, broken only by the faint light filtering down from the well opening high above, illuminating the dangling rope you descended. Water drips incessantly from unseen cracks in the roughly carved ceiling, echoing eerily in the confined space. The walls are slick with moisture and grime. To the east, a low, arched opening promises passage deeper into whatever lies beneath Oakhaven, its threshold shrouded in deeper shadow. A profound sense of isolation and hidden secrets permeates this forgotten place beneath the town's busy streets.",
