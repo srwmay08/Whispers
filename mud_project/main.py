@@ -327,12 +327,14 @@ def send_room_description(player_object: player_class.Player):
 # --- handle_player_command function ---
 # (This is the function from the previous turn, ID: main_py_handle_command_update_v6)
 # Ensure this is fully integrated here.
-@socketio.on('player_command')
-def handle_player_command(data):
+@socketio.on('connect')
+def handle_connect():
     sid = request.sid
-    command_input = data.get('command', '').strip()
-    if config.DEBUG_MODE: print(f"\nDEBUG CMD: SID={sid}, Command='{command_input}'")
-    if not command_input: return
+    if config.DEBUG_MODE: print(f"DEBUG: Client connected: SID {sid}") # Verify this logs for each attempt
+    player_creation_sessions[sid] = { "phase": "awaiting_login_name", "sid": sid, "messages_queue": [], "player_shell": None }
+    # This emit is critical
+    emit('game_messages', { 'messages': [{"text": getattr(config, 'WELCOME_MESSAGE', "Welcome!"), "type": "system_highlight"}, {"text": "Enter 'login <name>' or 'create <name>'", "type": "prompt"}] }, room=sid)
+    if config.DEBUG_MODE: print(f"DEBUG: Emitted initial game_messages to SID {sid}") # Add this for confirmation
 
     try:
         player = active_players.get(sid)
