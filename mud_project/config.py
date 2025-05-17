@@ -65,7 +65,6 @@ DEBUG_GAME_TICK_RESPAWN_PHASE = False # Show the "RESPAWN_PHASE: Checking..." me
 SEND_CLIENT_TICK_MARKERS = True # Send ">" to client for XP absorption or other tick events
 DEBUG_COMBAT_ROLLS = True
 
-
 DEFAULT_STAT_VALUE = 10
 
 # --- CREATION & RESPAWN
