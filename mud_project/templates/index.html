@@ -232,6 +232,9 @@
                 presenceDiv.textContent = roomData.presence_summary;
                 appendOutput(presenceDiv);
             }
+            
+            console.log("Client received items_summary:", roomData.items_summary); // <-- ADD THIS DEBUG LINE
+
             // Display items summary (YOU ALSO SEE) without ">"
             if (roomData.items_summary && roomData.items_summary.length > 0) {
                  const itemsDiv = document.createElement('div');
