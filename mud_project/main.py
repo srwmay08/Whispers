@@ -191,12 +191,13 @@ def send_room_description(player_object: player_class.Player):
     current_room_id = getattr(player_object, 'current_room_id', config.DEFAULT_START_ROOM_ID)
     if not isinstance(current_room_id, int):
         try: current_room_id = int(current_room_id)
-        except ValueError: current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1) # Ensure fallback
+        except ValueError: current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1)
         player_object.current_room_id = current_room_id
+    
     room_data = GAME_ROOMS.get(current_room_id)
     if not room_data:
         player_object.add_message(f"Error: You are in an unknown room (ID: {current_room_id})! Moving to safety...", "error_critical")
-        player_object.current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1) # Ensure fallback
+        player_object.current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1)
         if player_handler: player_handler.save_player(player_object)
         room_data = GAME_ROOMS.get(player_object.current_room_id)
         if not room_data:
@@ -204,80 +205,58 @@ def send_room_description(player_object: player_class.Player):
             return
 
     final_room_description = environment_system.get_description_for_room(room_data)
-    all_present_names = [p.name for sid, p in active_players.items() if hasattr(p, 'current_room_id') and p.current_room_id == current_room_id and sid != player_object.sid]
+    all_present_names = []
+
+    # Display other players
+    for sid, p in active_players.items():
+        if hasattr(p, 'current_room_id') and p.current_room_id == current_room_id and sid != player_object.sid:
+            all_present_names.append(p.name)
 
     # Display NPCs
     for npc_key in room_data.get("npcs", []):
         npc_template = GAME_NPCS.get(npc_key)
-        if npc_template and not combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(npc_key): # Check if recently defeated
+        # Check if NPC is recently defeated using its template key (assuming template key is the runtime_id for NPCs)
+        if npc_template and not combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(npc_key):
             all_present_names.append(npc_template.get("name", npc_key))
 
-    # Display Monsters
-    alive_monster_counts = {}
+    # --- CHANGE: Monster display logic modified ---
     monster_names_list_for_room_desc = []
-    active_monsters_in_room = [] # Store templates of active monsters
-
     # Iterate over monster keys/IDs defined in the room's "monsters" list
-    # This list should ideally represent active monster instances or their unique runtime IDs.
-    # For this example, we'll assume it's a list of template keys and derive conceptual runtime IDs
-    # for checking defeat status, as in the original combat log.
-    for i, monster_key_or_runtime_id in enumerate(room_data.get("monsters", [])):
-        # Determine the template key from monster_key_or_runtime_id
-        # This part might need adjustment based on how you store/manage monster instances.
-        # If monster_key_or_runtime_id is already a runtime ID:
-        #   monster_template_key = parse_template_key_from_runtime_id(monster_key_or_runtime_id)
-        # If it's a template key:
-        monster_template_key = monster_key_or_runtime_id
-
+    for i, monster_template_key_or_runtime_id in enumerate(room_data.get("monsters", [])):
+        # For now, assume it's a template key. If it were runtime IDs, logic would need to parse template key from it.
+        monster_template_key = monster_template_key_or_runtime_id
         monster_template = GAME_MONSTER_TEMPLATES.get(monster_template_key)
+        
         if monster_template:
-            # Construct a conceptual runtime_id for checking defeat.
-            # This needs to be consistent with how runtime_ids are generated/used elsewhere (e.g., in combat).
-            # If your room_data.monsters already holds unique runtime IDs, use those directly.
-            # If it holds template keys, you need a way to map to the specific instance's defeat status.
-            # For the example based on logs, using room_id + template_key + index.
+            # Construct the conceptual runtime_id used for tracking defeat status in combat.py
+            # This needs to be consistent with how it's generated in find_combat_target_in_room and handle_player_attack
+            # Example: f"{room_id}_{template_key}_{instance_index_in_room_list}"
+            # The index 'i' here represents the monster's position in the room_data["monsters"] list
             conceptual_runtime_id_for_check = f"{current_room_id}_{monster_template_key}_{i}"
 
             if not combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(conceptual_runtime_id_for_check):
-                active_monsters_in_room.append(monster_template) # Add template for now
-
-    # Now, count and format names for display
-    for monster_template_active in active_monsters_in_room:
-        base_name = monster_template_active.get("name", "a creature")
-        alive_monster_counts[base_name] = alive_monster_counts.get(base_name, 0) + 1
-
-    processed_for_display_in_room_desc = {}
-    for monster_template_active in active_monsters_in_room:
-        base_name = monster_template_active.get("name", "a creature")
-        if alive_monster_counts.get(base_name, 0) > 1:
-            num = processed_for_display_in_room_desc.get(base_name, 0) + 1
-            monster_names_list_for_room_desc.append(f"{base_name} ({num})")
-            processed_for_display_in_room_desc[base_name] = num
-        else:
-            monster_names_list_for_room_desc.append(base_name)
-
+                monster_names_list_for_room_desc.append(monster_template.get("name", "a creature"))
+    
     if monster_names_list_for_room_desc:
         all_present_names.extend(monster_names_list_for_room_desc)
-
+    # --- END CHANGE ---
 
     all_present_names.sort()
     present_entities_str = "ALSO HERE: " + ", ".join(all_present_names) + "." if all_present_names else ""
 
-    # Display items and dynamic objects
     visible_item_names = []
     if config.DEBUG_MODE:
         debug_msg = f"--- DEBUG SEND_ROOM_DESC (Room ID: {current_room_id}) ---\n"
         debug_msg += f"  Static items in room_data['items']: {room_data.get('items', [])}\n"
         debug_msg += f"  Dynamic objects in room_data['objects'] (keys): {list(room_data.get('objects', {}).keys())}\n"
 
-    for item_id_static in room_data.get("items", []): # Static items
+    for item_id_static in room_data.get("items", []):
         item_tpl_static = GAME_ITEMS.get(item_id_static)
         if item_tpl_static:
             visible_item_names.append(item_tpl_static.get("name", item_id_static))
             if config.DEBUG_MODE: debug_msg += f"  Added static item to visible: '{item_tpl_static.get('name', item_id_static)}'\n"
 
-
-    for obj_id_dyn, obj_data_dynamic in room_data.get("objects", {}).items(): # Dynamic objects like corpses, ground items
+    for obj_id_dyn, obj_data_dynamic in room_data.get("objects", {}).items():
         if config.DEBUG_MODE:
             debug_msg += f"  Checking dynamic object ID '{obj_id_dyn}': Name='{obj_data_dynamic.get('name', 'N/A')}', is_corpse={obj_data_dynamic.get('is_corpse', False)}, is_ground_item={obj_data_dynamic.get('is_ground_item', False)}\n"
         if obj_data_dynamic.get("is_corpse") or obj_data_dynamic.get("is_ground_item"):
@@ -285,18 +264,17 @@ def send_room_description(player_object: player_class.Player):
             if config.DEBUG_MODE:
                 debug_msg += f"    Added dynamic object to visible: '{obj_data_dynamic.get('name', 'an object')}' (Corpse: {obj_data_dynamic.get('is_corpse', False)}, GroundItem: {obj_data_dynamic.get('is_ground_item', False)})\n"
 
-
     items_on_ground_str = ""
     if visible_item_names:
-        # Sort and uniqueify, then join
-        sorted_unique_items = sorted(list(set(visible_item_names)))
+        sorted_unique_items = sorted(list(set(visible_item_names))) # Unique names for display
         items_on_ground_str = "YOU ALSO SEE: " + ", ".join(sorted_unique_items) + "."
+    else: # If no items are visible
+        items_on_ground_str = "YOU ALSO SEE: (nothing)" # Explicitly state nothing
     
     if config.DEBUG_MODE:
-        debug_msg += f"  Final 'YOU ALSO SEE' string: {items_on_ground_str if items_on_ground_str else 'YOU ALSO SEE: (nothing)'}\n"
+        debug_msg += f"  Final 'YOU ALSO SEE' string: {items_on_ground_str}\n" # Ensure (nothing) is handled
         debug_msg += "--- END DEBUG SEND_ROOM_DESC ---"
         print(debug_msg)
-
 
     room_data_payload = {
         "name": room_data.get("name", "Nowhere Special"),

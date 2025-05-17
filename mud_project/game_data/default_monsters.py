@@ -37,7 +37,7 @@ DEFAULT_MONSTER_TEMPLATES = {
             "aura": 5, "willpower": 20
         },
         "items": [], "skills": ["bite"], "spells": [],
-        "home_room_id": 16, "respawn_chance": 1.0, "respawn_time_seconds": 10, "is_unique": True, # Note: respawn time very short
+        "home_room_id": 16, "respawn_chance": 1.0, "respawn_time_seconds": 20, "is_unique": True, # Note: respawn time very short
         "faction": "Vermin", "faction_hits_on_kill": [], "religion": "None", "religion_hits_on_kill": [],
         "dialogue": ["*Squeak!*", "*Chitters angrily*"],
         "is_merchant": False, "can_repair": False, "buffs_on_spawn": [],
