@@ -139,11 +139,10 @@
             lineDiv.className = 'prefixed-line message-' + type; 
             const prefixSpan = document.createElement('span');
             prefixSpan.className = 'message-prefix';
-            // Make the prefix conditional for room descriptions if they already contain it
-            if (type === 'room_description' && text.startsWith('[')) { // Heuristic for room name lines
-                 // No prefix for room name line itself if it's formatted like that
+            if (type === 'room_description' && text.startsWith('[')) { 
+                 // No prefix for room name line itself
             } else if (type.startsWith('room_') && (type !== 'room_name_line' && type !== 'room_description')) {
-                 // No prefix for other parts of room description if they are distinct lines
+                 // No prefix for other parts of room description
             } else if (type === 'room_name_line') {
                 // No prefix for the room name itself.
             }
@@ -166,19 +165,17 @@
                 prefixSpan.className = 'message-prefix';
                 prefixSpan.textContent = '>';
                 messageDiv.appendChild(prefixSpan);
-                // For echo, text already includes "> ", so remove it from messageText before appending
                 messageDiv.appendChild(document.createTextNode(String(messageText).startsWith("> ") ? String(messageText).substring(2) : String(messageText))); 
                 appendOutput(messageDiv);
                 return;
             }
-             if (type === 'system_tick_marker' && messageText === '>') { // For player's own tick marker
+             if (type === 'system_tick_marker' && messageText === '>') { 
                 const messageDiv = document.createElement('div');
                 messageDiv.className = 'message-' + type; 
                 const prefixSpan = document.createElement('span');
                 prefixSpan.className = 'message-prefix'; 
-                prefixSpan.textContent = '>'; // This is the actual marker text
+                prefixSpan.textContent = '>'; 
                 messageDiv.appendChild(prefixSpan);
-                // No additional text needed for this specific marker type
                 appendOutput(messageDiv);
                 return;
             }
@@ -191,14 +188,11 @@
                 }
             }
             
-            // For other messages, split by newline and process each line
             const lines = String(messageText).split('\n'); 
             lines.forEach(line => {
-                // Adjust prefixing for room info lines
                 if (type.startsWith('room_')) {
                     const lineDiv = document.createElement('div');
                     lineDiv.className = 'message-' + type;
-                    // No ">" prefix for specific room lines
                     lineDiv.textContent = line;
                     appendOutput(lineDiv);
                 } else {
@@ -213,19 +207,16 @@
                 addMessage("Error: Received invalid room data from server.", "error_critical");
                 return;
             }
-            // Display room name without ">"
             const roomNameDiv = document.createElement('div');
             roomNameDiv.className = 'message-room_name_line';
             roomNameDiv.textContent = `[${roomData.name || 'Unknown Room'}]`;
             appendOutput(roomNameDiv);
 
-            // Display room description without ">"
             const descDiv = document.createElement('div');
             descDiv.className = 'message-room_description';
             descDiv.textContent = roomData.description || 'No description available.';
             appendOutput(descDiv);
             
-            // Display presence summary (ALSO HERE) without ">"
             if (roomData.presence_summary && roomData.presence_summary.length > 0) { 
                 const presenceDiv = document.createElement('div');
                 presenceDiv.className = 'message-room_presence_line';
@@ -233,33 +224,36 @@
                 appendOutput(presenceDiv);
             }
             
-            console.log("CLIENT DEBUG: Raw items_summary from roomData:", roomData.items_summary);
-            let shouldDisplayItems = false; // Default to false
-            if (roomData.items_summary) { // Check if it exists first
-                console.log("CLIENT DEBUG: items_summary exists. Length:", roomData.items_summary.length);
-                if (roomData.items_summary.length > 0) {
-                    shouldDisplayItems = true;
-                }
-            }
-            console.log("CLIENT DEBUG: Condition to display items_summary (shouldDisplayItems):", shouldDisplayItems);
+            // --- CHANGE: Removed the user's added debugging block that caused duplication ---
+            // The console.log lines related to items_summary can also be removed if no longer needed for your debugging.
+            // console.log("CLIENT DEBUG: Raw items_summary from roomData:", roomData.items_summary);
+            // let shouldDisplayItems = false; 
+            // if (roomData.items_summary) { 
+            //     console.log("CLIENT DEBUG: items_summary exists. Length:", roomData.items_summary.length);
+            //     if (roomData.items_summary.length > 0) {
+            //         shouldDisplayItems = true;
+            //     }
+            // }
+            // console.log("CLIENT DEBUG: Condition to display items_summary (shouldDisplayItems):", shouldDisplayItems);
 
-            if (shouldDisplayItems) {
-                console.log("CLIENT DEBUG: ATTEMPTING TO APPEND items_summary line:", roomData.items_summary);
-                appendOutput(createPrefixedMessageLine(roomData.items_summary, 'room_items_line'));
-            } else if (roomData.items_summary === "") { // Explicitly check for empty string
-                console.log("CLIENT DEBUG: items_summary is an empty string. Not displaying 'YOU ALSO SEE'.");
-            } else {
-                console.log("CLIENT DEBUG: items_summary is falsy or length 0. Not displaying 'YOU ALSO SEE'. Value:", roomData.items_summary);
-            }
+            // if (shouldDisplayItems) { // THIS BLOCK WAS THE CULPRIT FOR DUPLICATION
+            //     console.log("CLIENT DEBUG: ATTEMPTING TO APPEND items_summary line:", roomData.items_summary);
+            //     appendOutput(createPrefixedMessageLine(roomData.items_summary, 'room_items_line')); 
+            // } else if (roomData.items_summary === "") { 
+            //     console.log("CLIENT DEBUG: items_summary is an empty string. Not displaying 'YOU ALSO SEE'.");
+            // } else {
+            //     console.log("CLIENT DEBUG: items_summary is falsy or length 0. Not displaying 'YOU ALSO SEE'. Value:", roomData.items_summary);
+            // }
+            // --- END CHANGE ---
 
-            // Display items summary (YOU ALSO SEE) without ">"
-            if (roomData.items_summary && roomData.items_summary.length > 0) {
+            // This is the original, correct block for displaying items_summary
+            if (roomData.items_summary && roomData.items_summary.length > 0 && roomData.items_summary.trim() !== "YOU ALSO SEE: (nothing)") {
                  const itemsDiv = document.createElement('div');
                  itemsDiv.className = 'message-room_items_line';
-                 itemsDiv.textContent = roomData.items_summary; // Directly use the pre-formatted string
+                 itemsDiv.textContent = roomData.items_summary; 
                  appendOutput(itemsDiv);
             }
-            // Display exits without ">"
+
             const exitsDiv = document.createElement('div');
             exitsDiv.className = 'message-room_exits_line';
             exitsDiv.textContent = `OBVIOUS EXITS: ${roomData.exits || 'None'}`;
@@ -282,15 +276,15 @@
                     addMessage(`  ${race.description}`, 'info'); 
                     if (race.stat_modifiers_display && typeof race.stat_modifiers_display === 'object' && Object.keys(race.stat_modifiers_display).length > 0) {
                         let modifiersStr = Object.entries(race.stat_modifiers_display)
-                            .map(([stat, val_str]) => `${stat.toUpperCase()} ${val_str}`) // val_str is already formatted like "+X" or "-Y"
+                            .map(([stat, val_str]) => `${stat.toUpperCase()} ${val_str}`) 
                             .join(', ');
                         addMessage(`  Stat Modifiers: ${modifiersStr}`, 'feedback');
                     }
-                    if (race.notes) { // Changed from lore_snippet to notes to match creation.py
+                    if (race.notes) { 
                         addMessage(`  "${race.notes}"`, 'narrative_emotive');
                     }
                     const spacer = document.createElement('div'); 
-                    spacer.innerHTML = '&nbsp;'; // Ensures a visual line break
+                    spacer.innerHTML = '&nbsp;'; 
                     appendOutput(spacer); 
                 });
                 addMessage("---------------------------", "system_highlight");
@@ -307,7 +301,7 @@
             rtBarContainer.classList.add('active');
             commandInput.disabled = true; 
 
-            const totalTicks = Math.max(1, Math.ceil(durationSeconds * 5)); // More ticks for smoother look (e.g., 5 per sec)
+            const totalTicks = Math.max(1, Math.ceil(durationSeconds * 5)); 
             const tickDurationMs = (durationSeconds * 1000) / totalTicks;
             
             for (let i = 0; i < totalTicks; i++) {

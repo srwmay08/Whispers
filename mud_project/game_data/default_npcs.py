@@ -164,7 +164,7 @@ DEFAULT_NPCS_TEMPLATES = {
             "adjusts his spectacles."
         ],
         "keywords": ["timothy", "crier", "news"],
-        "items": ["crumpled_news_scroll"], # Items he *carries* in addition to equipped items.
+        "items": [], # Items he *carries* in addition to equipped items.
                                           # His bell is now part of his equipment table.
         "equipment_table_id": "timothy_town_crier_gear", # NEW - Links to equipment_tables.py
 
