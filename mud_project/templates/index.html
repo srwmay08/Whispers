@@ -208,28 +208,27 @@
 
             // Display room description
             const descDiv = document.createElement('div');
-            descDiv.className = 'message-room_description'; // Use a class that doesn't add ">"
+            descDiv.className = 'message-room_description'; 
             descDiv.textContent = roomData.description || 'No description available.';
-            appendOutput(descDiv); // Append directly, no ">" prefix from createPrefixedMessageLine
+            appendOutput(descDiv); 
 
             // Display presence summary (NPCs, other players, monsters)
-            // This string comes from the server already formatted with "ALSO HERE: ..."
             if (roomData.presence_summary && roomData.presence_summary.trim().length > 0) {
-                 // We'll use createPrefixedMessageLine for the ">" prefix, but the content is already good.
                 appendOutput(createPrefixedMessageLine(roomData.presence_summary, 'room_presence_line'));
             }
 
-            // Display items summary (corpses, items on ground)
-            // This string comes from the server already formatted with "YOU ALSO SEE: ..."
+            // **** THIS IS THE KEY PART FOR DISPLAYING CORPSES/ITEMS ON GROUND ****
+            // The server now sends a pre-formatted "items_summary" string.
+            // This string will either be like "YOU ALSO SEE: Item A, Corpse B." or an empty string if nothing is seen.
             if (roomData.items_summary && roomData.items_summary.trim().length > 0) {
-                // We'll use createPrefixedMessageLine for the ">" prefix.
+                // The createPrefixedMessageLine adds the ">" prefix.
+                // The roomData.items_summary already contains "YOU ALSO SEE: ..."
                 appendOutput(createPrefixedMessageLine(roomData.items_summary, 'room_items_line'));
             }
 
             // Display exits
             appendOutput(createPrefixedMessageLine(`OBVIOUS EXITS: ${roomData.exits || 'None'}`, 'room_exits_line'));
         }
-
         function displayRaceOptions(racePayload) { 
             if (!racePayload || typeof racePayload !== 'object') {
                 console.error("CLIENT: displayRaceOptions called with invalid data:", racePayload);
