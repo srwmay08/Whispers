@@ -668,7 +668,15 @@ def handle_player_command(data):
                                                 broadcast_to_room(player.current_room_id, msg_info['text'], msg_info['type'], exclude_sids=[player.sid, target_player_object.sid])
                                         if combat_results.get('defeated_player_sid'):
                                             defeated_player = active_players.get(combat_results['defeated_player_sid'])
-                                            if defeated_player:
+                                            if defeated_entity_template.get("leaves_corpse", True):
+                                                corpse_data = loot_handler.create_corpse_object_data(
+                                                    defeated_entity_template,
+                                                    defeated_runtime_id_from_combat,
+                                                    GAME_ITEMS, # This is game_items_data
+                                                    GAME_EQUIPMENT_TABLES # Pass the equipment tables
+                                                )
+                                            if corpse_data and current_room_data:
+                                            # ...if defeated_player:
                                                 player.add_message(f"You have defeated {defeated_player.name}!", "event_pvp_victory")
                                                 defeated_player.add_message(f"You have been defeated by {player.name}!", "event_pvp_defeat_major")
                                                 broadcast_to_room(player.current_room_id, f"{defeated_player.name} falls in battle to {player.name}!", "ambient_pvp_defeat", [player.sid, defeated_player.sid])

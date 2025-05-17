@@ -101,27 +101,12 @@ def generate_skinning_loot(monster_template, player_skill_value, game_items_data
     return skinned_items
 
 
-def create_corpse_object_data(defeated_entity_template, defeated_entity_runtime_id, game_items_data): # Corrected: Removed GAME_EQUIPMENT_TABLES
+def create_corpse_object_data(defeated_entity_template, defeated_entity_runtime_id, game_items_data, game_equipment_tables_data): # Added game_equipment_tables_data
     entity_name = defeated_entity_template.get("name", "Unknown Creature")
-    
-    # Use the capitalized entity_name for the corpse name
     corpse_name = f"corpse of a {entity_name}"
-    
-    corpse_id = f"corpse_{defeated_entity_runtime_id}_{int(time.time())}" # Ensure defeated_entity_runtime_id is unique enough
+    corpse_id = f"corpse_{defeated_entity_runtime_id}_{int(time.time())}"
 
-    # --- START NEW/IMPROVED LOOT GENERATION ---
     final_loot_on_corpse = []
-
-    original_key = defeated_entity_template.get("_id", defeated_entity_template.get("key"))
-    original_type = "monster" if "monster" in defeated_entity_runtime_id.lower() else "npc" # Heuristic
-
-    corpse_data = {
-        # ...
-        "original_template_key": original_key,
-        "original_template_type": original_type,
-        "inventory": final_loot_on_corpse, # Items, not gold
-        # ...
-    }
 
     # 1. Process 'carried_items' (items the NPC always has, not equipped)
     # You might want a config for drop chance of these too
@@ -140,16 +125,21 @@ def create_corpse_object_data(defeated_entity_template, defeated_entity_runtime_
             print(f"DEBUG LOOT_HANDLER: Carried item_key '{item_key}' not found in GAME_ITEMS. Skipping.")
 
     # 2. Process Equipped Items
-    # Consider a global config or per-item/per-NPC config for drop chance of equipped gear
     equipment_table_id = defeated_entity_template.get("equipment_table_id")
-    equipment_table_data = GAME_EQUIPMENT_TABLES.get(equipment_table_id) if equipment_table_id else None
+    # Use the passed-in game_equipment_tables_data
+    equipment_table_definition = game_equipment_tables_data.get(equipment_table_id) if equipment_table_id else None
 
     always_drop_list = []
-    chance_drop_others = getattr(config, 'NPC_DROP_EQUIPPED_CHANCE', 1.0) # Fallback
+    chance_drop_others = getattr(config, 'NPC_DROP_EQUIPPED_CHANCE', 1.0) # Fallback general chance
 
-    if equipment_table_data:
-        always_drop_list = equipment_table_data.get("always_drop_equipped", [])
-        chance_drop_others = equipment_table_data.get("chance_drop_other_equipped_percent", chance_drop_others)
+    if equipment_table_definition: # Check if the table itself was found
+        always_drop_list = equipment_table_definition.get("always_drop_equipped", [])
+        chance_drop_others = equipment_table_definition.get("chance_drop_other_equipped_percent", chance_drop_others)
+        if config.DEBUG_MODE:
+            print(f"DEBUG LOOT_HANDLER: Using equip_table '{equipment_table_id}'. Always drop: {always_drop_list}, Chance others: {chance_drop_others}")
+    elif equipment_table_id and config.DEBUG_MODE: # Warn if ID was present but table not found
+        print(f"DEBUG LOOT_HANDLER: Equipment table ID '{equipment_table_id}' not found in game_equipment_tables_data.")
+
 
     for slot, equipped_item_id in defeated_entity_template.get("equipped", {}).items():
         if equipped_item_id and equipped_item_id in game_items_data:
@@ -157,7 +147,7 @@ def create_corpse_object_data(defeated_entity_template, defeated_entity_runtime_
             if equipped_item_id in always_drop_list:
                 item_should_drop = True
                 if config.DEBUG_MODE:
-                    print(f"DEBUG LOOT_HANDLER: Equipped item '{equipped_item_id}' (slot: {slot}) is in always_drop list for table '{equipment_table_id}'.")
+                    print(f"DEBUG LOOT_HANDLER: Equipped item '{equipped_item_id}' (slot: {slot}) is in always_drop list.")
             elif random.random() < chance_drop_others:
                 item_should_drop = True
                 if config.DEBUG_MODE:
@@ -170,7 +160,8 @@ def create_corpse_object_data(defeated_entity_template, defeated_entity_runtime_
                 final_loot_on_corpse.append(equipped_item_id)
                 if config.DEBUG_MODE:
                     print(f"DEBUG LOOT_HANDLER: Equipped item '{equipped_item_id}' from slot '{slot}' ADDED to loot for {corpse_name}.")
-
+        elif equipped_item_id and config.DEBUG_MODE:
+             print(f"DEBUG LOOT_HANDLER: Equipped item_key '{equipped_item_id}' (slot: {slot}) not found in GAME_ITEMS. Skipping.")
 
     # 3. Process Loot Table
     loot_table_id = defeated_entity_template.get("loot_table_id")
@@ -184,34 +175,29 @@ def create_corpse_object_data(defeated_entity_template, defeated_entity_runtime_
     
     # Ensure keywords are lowercase for matching and include generic "corpse"
     # Also add parts of the original name for more flexible searching like "search timothy" for "corpse of timothy"
-    original_name_lower = entity_name.lower()
-    keywords_for_corpse = ["corpse", original_name_lower]
-    keywords_for_corpse.extend(original_name_lower.split()) # Add individual words of the name
-    # Remove duplicates if any, though unlikely here
+    keywords_for_corpse = ["corpse", entity_name.lower()] + entity_name.lower().split()
     keywords_for_corpse = list(set(keywords_for_corpse))
-
 
     corpse_data = {
         "id": corpse_id,
         "name": corpse_name,
-        "original_name": entity_name, # Store the original capitalized name for display
+        "original_name": entity_name,
         "description": f"The lifeless body of {entity_name}.",
-        "keywords": keywords_for_corpse, # Use the generated keywords
-        "inventory": final_loot_on_corpse, # CHANGED from "loot_inventory" to "inventory" for consistency
+        "keywords": keywords_for_corpse,
+        "inventory": final_loot_on_corpse,
         "is_corpse": True,
-        "skinnable": defeated_entity_template.get("skinnable", False), # For 'skin' command
-        "skinned": False, # Track if already skinned
-        "searched_fully": False, # Track if the corpse has been searched (for one-time search messages)
+        "skinnable": defeated_entity_template.get("skinnable", False),
+        "skinned": False,
+        "searched_and_emptied": False, # Corrected from "searched_fully" to match 'search' command logic
         "created_at": time.time(),
         "decay_at": time.time() + getattr(config, 'CORPSE_DECAY_TIME_SECONDS', 300)
-        # Removed monster_template_key and npc_template_key as original_name and type (if added) should suffice
     }
-    
-    # Update description based on whether there's loot
+
     if final_loot_on_corpse:
         corpse_data["description"] += " It looks like it might have something of value."
     else:
         corpse_data["description"] += " It appears to have nothing of value on it."
+        corpse_data["searched_and_emptied"] = True # If no loot, it's effectively empty
 
     if config.DEBUG_MODE:
         print(f"DEBUG LOOT_HANDLER: Created corpse data for '{corpse_name}' (ID: {corpse_id}) with inventory: {final_loot_on_corpse}")
