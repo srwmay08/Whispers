@@ -141,20 +141,35 @@ def create_corpse_object_data(defeated_entity_template, defeated_entity_runtime_
 
     # 2. Process Equipped Items
     # Consider a global config or per-item/per-NPC config for drop chance of equipped gear
-    drop_equipped_chance = getattr(config, 'NPC_DROP_EQUIPPED_CHANCE', 
-                                   getattr(config, 'DEFAULT_DROP_EQUIPPED_CHANCE', 1.0)) # Default to 100%
+    equipment_table_id = defeated_entity_template.get("equipment_table_id")
+    equipment_table_data = GAME_EQUIPMENT_TABLES.get(equipment_table_id) if equipment_table_id else None
+
+    always_drop_list = []
+    chance_drop_others = getattr(config, 'NPC_DROP_EQUIPPED_CHANCE', 1.0) # Fallback
+
+    if equipment_table_data:
+        always_drop_list = equipment_table_data.get("always_drop_equipped", [])
+        chance_drop_others = equipment_table_data.get("chance_drop_other_equipped_percent", chance_drop_others)
 
     for slot, equipped_item_id in defeated_entity_template.get("equipped", {}).items():
         if equipped_item_id and equipped_item_id in game_items_data:
-            # Add logic here if certain items should not drop (e.g., plot items, or based on chance)
-            if random.random() < drop_equipped_chance:
+            item_should_drop = False
+            if equipped_item_id in always_drop_list:
+                item_should_drop = True
+                if config.DEBUG_MODE:
+                    print(f"DEBUG LOOT_HANDLER: Equipped item '{equipped_item_id}' (slot: {slot}) is in always_drop list for table '{equipment_table_id}'.")
+            elif random.random() < chance_drop_others:
+                item_should_drop = True
+                if config.DEBUG_MODE:
+                    print(f"DEBUG LOOT_HANDLER: Equipped item '{equipped_item_id}' (slot: {slot}) dropped by chance ({chance_drop_others*100}%).")
+            else:
+                if config.DEBUG_MODE:
+                    print(f"DEBUG LOOT_HANDLER: Equipped item '{equipped_item_id}' (slot: {slot}) did NOT drop (chance failed: {chance_drop_others*100}%).")
+
+            if item_should_drop:
                 final_loot_on_corpse.append(equipped_item_id)
                 if config.DEBUG_MODE:
-                    print(f"DEBUG LOOT_HANDLER: Equipped item '{equipped_item_id}' from slot '{slot}' added to loot for {corpse_name}.")
-            elif config.DEBUG_MODE:
-                print(f"DEBUG LOOT_HANDLER: Equipped item '{equipped_item_id}' from slot '{slot}' did not drop (chance failed).")
-        elif equipped_item_id and config.DEBUG_MODE: # Log if equipped item_id is not in GAME_ITEMS
-             print(f"DEBUG LOOT_HANDLER: Equipped item_key '{equipped_item_id}' (slot: {slot}) not found in GAME_ITEMS. Skipping.")
+                    print(f"DEBUG LOOT_HANDLER: Equipped item '{equipped_item_id}' from slot '{slot}' ADDED to loot for {corpse_name}.")
 
 
     # 3. Process Loot Table
