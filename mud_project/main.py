@@ -719,7 +719,6 @@ def handle_connect(*args): # Add *args to accept any positional arguments
                 if p_shell and hasattr(p_shell, "get_queued_messages"): messages_to_client.extend(p_shell.get_queued_messages())
                 if messages_to_client: socketio.emit('game_messages', {'messages': messages_to_client}, room=s_id)
             if not player_shell and current_phase == "awaiting_login_name":
-                parts_initial = command_input.split(" ", 1); verb_initial = parts_initial[0].lower()
                 name_arg_initial = parts_initial[1].strip().title() if len(parts_initial) > 1 and parts_initial[1].strip() else ""
                 if verb_initial == "create" and name_arg_initial:
                     min_len = getattr(config, 'MIN_CHAR_NAME_LENGTH', 3); max_len = getattr(config, 'MAX_CHAR_NAME_LENGTH', 20)
@@ -759,7 +758,6 @@ def handle_connect(*args): # Add *args to accept any positional arguments
             emit('game_messages', {'messages': [{"text": "Connection error. Please try reconnecting.", "type": "error_critical"}]}, room=sid)
 
     except Exception as e:
-        print(f"!!! UNHANDLED EXCEPTION IN handle_player_command for SID {sid}, Command: '{command_input}' !!!")
         traceback.print_exc()
         try:
             socketio.emit('game_messages', {'messages': [{"text": "A critical server error occurred. Your command may not have been processed.", "type": "error_critical"}]}, room=sid)
