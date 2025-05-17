@@ -114,7 +114,7 @@ DEFAULT_ITEM_TEMPLATES = {
         "_id": "kobold_spear", "type": "weapon", 
         "slot": ["mainhand"], # Can also be "twohand" if it requires two hands
         "skill": "polearm_weapons",
-        "name": "Kobold Spear", "damage": "1d6-1", "weapon_as_bonus": -1, "enchantment_as_bonus": 0,
+        "name": "Kobold Spear", "weapon_as_bonus": -1, "enchantment_as_bonus": 0,
         "avd_modifiers": {"unarmored": 8, "cloth": 5, "leather": 2, "chain": -2, "plate": -6},
         "description": "A crudely made spear...",
         "weight": 3, "value": 6, "rarity": "common", "keywords": ["spear", "kobold", "polearm", "weapon"],
@@ -141,7 +141,6 @@ DEFAULT_ITEM_TEMPLATES = {
         "type": "weapon",
         "slot": ["mainhand"], # Or "twohand"
         "skill": "polearm_weapons",
-        "damage": "1d6+1",
         "weapon_as_bonus": 2,
         "enchantment_as_bonus": 0,
         "avd_modifiers": {"unarmored": 10, "cloth": 7, "leather": 3, "chain": 0, "plate": -4},

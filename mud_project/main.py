@@ -52,18 +52,17 @@ TRACKED_DEFEATED_ENTITIES = {}
 game_tick_counter = 0
 game_loop_active = True
 
+# Ensure ENTITY_COMBAT_PARTICIPANTS is defined globally if not already
+# ENTITY_COMBAT_PARTICIPANTS = {} 
+
 def game_tick_loop():
-    # Ensure all necessary globals are available
     global game_tick_counter, active_players, GAME_ROOMS, GAME_ITEMS, GAME_NPCS, \
            GAME_MONSTER_TEMPLATES, GAME_RACES, GAME_LOOT_TABLES, GAME_EQUIPMENT_TABLES, \
-           TRACKED_DEFEATED_ENTITIES
+           TRACKED_DEFEATED_ENTITIES, ENTITY_COMBAT_PARTICIPANTS, game_loop_active # Added ENTITY_COMBAT_PARTICIPANTS
 
     local_tz = pytz.utc
-    try:
-        import tzlocal
-        local_tz = tzlocal.get_localzone()
-    except ImportError:
-        print("WARNING: tzlocal not installed. Falling back to UTC for logs.")
+    try: import tzlocal; local_tz = tzlocal.get_localzone()
+    except ImportError: print("WARNING: tzlocal not installed. Falling back to UTC for logs.")
 
     if config.DEBUG_MODE and game_tick_counter == 0:
         print(f"Game tick loop started at {datetime.datetime.now(local_tz).strftime('%Y-%m-%d %H:%M:%S %Z')} (UTC: {datetime.datetime.now(pytz.utc).strftime('%Y-%m-%d %H:%M:%S %Z')})")
@@ -76,36 +75,111 @@ def game_tick_loop():
         log_time_prefix = f"[{datetime_local_now_for_log.strftime('%Y-%m-%d %H:%M:%S %Z')}] (UTC: {datetime_utc_now_for_log.strftime('%H:%M:%S')}) TICK {game_tick_counter}"
         game_tick_counter += 1
 
-        # --- System-Wide Updates ---
-        environment_system.update_environment_state(
-            game_tick_counter, active_players, GAME_ROOMS, log_time_prefix, broadcast_to_room
-        )
+        environment_system.update_environment_state(game_tick_counter, active_players, GAME_ROOMS, log_time_prefix, broadcast_to_room)
         respawn_check_interval = getattr(config, 'MONSTER_RESPAWN_TICK_INTERVAL', 6)
         if game_tick_counter > 0 and game_tick_counter % respawn_check_interval == 0:
-            # Call process_respawns with all required arguments
-            respawn_system.process_respawns(
-                log_time_prefix, game_time_utc_now, TRACKED_DEFEATED_ENTITIES,
-                GAME_ROOMS, GAME_NPCS, GAME_MONSTER_TEMPLATES,
-                broadcast_to_room,
-                combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM, # From combat.py
-                GAME_EQUIPMENT_TABLES,
-                GAME_ITEMS
-            )
+            respawn_system.process_respawns(log_time_prefix, game_time_utc_now, TRACKED_DEFEATED_ENTITIES, GAME_ROOMS, GAME_NPCS, GAME_MONSTER_TEMPLATES, broadcast_to_room, combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM, GAME_EQUIPMENT_TABLES, GAME_ITEMS)
+        
         corpse_decay_interval = getattr(config, 'CORPSE_DECAY_TICK_INTERVAL', 10)
         if game_tick_counter > 0 and game_tick_counter % corpse_decay_interval == 0:
             decay_messages_by_room = loot_handler.process_corpse_decay(GAME_ROOMS, log_time_prefix)
             for room_id_decay, messages_list in decay_messages_by_room.items():
-                for msg_text in messages_list:
-                    broadcast_to_room(room_id_decay, msg_text, "ambient_neutral")
+                for msg_text in messages_list: broadcast_to_room(room_id_decay, msg_text, "ambient_neutral")
 
-        # --- Player-Specific Tick Updates ---
+        # --- NEW: Entity (NPC/Monster) Combat AI Tick ---
+        current_entities_in_combat = list(ENTITY_COMBAT_PARTICIPANTS.keys()) # Iterate over a copy
+        for entity_runtime_id in current_entities_in_combat:
+            combat_state = ENTITY_COMBAT_PARTICIPANTS.get(entity_runtime_id)
+            if not combat_state or combat_state.get("target_sid") is None:
+                if config.DEBUG_MODE and combat_state: print(f"DEBUG TICK AI: {entity_runtime_id} in combat participants but no target_sid. Removing."); 
+                ENTITY_COMBAT_PARTICIPANTS.pop(entity_runtime_id, None)
+                continue
+
+            player_target = active_players.get(combat_state["target_sid"])
+            if not player_target or player_target.hp <= 0: # Target is gone or defeated
+                if config.DEBUG_MODE: print(f"DEBUG TICK AI: Target {combat_state['target_sid']} for {entity_runtime_id} is gone or defeated. Removing from combat."); 
+                ENTITY_COMBAT_PARTICIPANTS.pop(entity_runtime_id, None)
+                continue
+            
+            # Determine entity_data and entity_type
+            entity_data = None; entity_type = None; entity_room_id = None
+            # This part needs to correctly fetch the entity's current data and type
+            # It might involve parsing entity_runtime_id or looking it up
+            # For simplicity, assume entity_runtime_id can be parsed or is a direct key
+            
+            # Example: if entity_runtime_id is an NPC key
+            if entity_runtime_id in GAME_NPCS:
+                entity_data = GAME_NPCS.get(entity_runtime_id)
+                entity_type = "npc"
+                # NPCs are globally defined, their "room" is implicit by player's room for now
+                # Or, if NPCs can move, their current_room_id would be tracked.
+                # For this example, assume NPC is in the same room as the player it's targeting.
+                entity_room_id = player_target.current_room_id 
+            else: # Try to find as a monster (this part needs more robust ID handling)
+                # This is a simplified lookup; real monster instances might need better tracking
+                # We need to find which room this monster instance belongs to and get its template
+                # For now, this part is a placeholder for robust monster instance lookup
+                for room_id_check, room_content_check in GAME_ROOMS.items():
+                    for i, mon_key_in_room in enumerate(room_content_check.get("monsters",[])):
+                        conceptual_mon_runtime_id = f"{room_id_check}_{mon_key_in_room}_{i}"
+                        if conceptual_mon_runtime_id == entity_runtime_id:
+                            entity_data = GAME_MONSTER_TEMPLATES.get(mon_key_in_room)
+                            entity_type = "monster"
+                            entity_room_id = room_id_check
+                            break
+                    if entity_data: break
+            
+            if not entity_data:
+                if config.DEBUG_MODE: print(f"DEBUG TICK AI: Could not find entity_data for {entity_runtime_id}. Removing from combat."); 
+                ENTITY_COMBAT_PARTICIPANTS.pop(entity_runtime_id, None)
+                continue
+
+            # Check if entity is still in the same room as the player
+            if entity_room_id != player_target.current_room_id:
+                if config.DEBUG_MODE: print(f"DEBUG TICK AI: {entity_runtime_id} is no longer in the same room as target {player_target.name}. Disengaging."); 
+                ENTITY_COMBAT_PARTICIPANTS.pop(entity_runtime_id, None)
+                continue
+            
+            # Check if entity itself is defeated (e.g. by another player or effect)
+            if combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(entity_runtime_id):
+                if config.DEBUG_MODE: print(f"DEBUG TICK AI: {entity_runtime_id} is recently defeated. Removing from combat."); 
+                ENTITY_COMBAT_PARTICIPANTS.pop(entity_runtime_id, None)
+                continue
+
+            if time.time() >= combat_state.get("next_attack_time", 0):
+                if config.DEBUG_MODE: print(f"DEBUG TICK AI: {entity_runtime_id} ({entity_data.get('name')}) attacking {player_target.name} (SID: {player_target.sid})")
+                
+                # Call the new combat handler for entity attacking player
+                attack_results = combat.handle_entity_attack(entity_data, entity_type, entity_runtime_id, player_target, GAME_ITEMS)
+                
+                # Send messages from entity attack
+                if attack_results.get("attacker_message"): # Message for the entity (server log or future NPC thought process)
+                    if config.DEBUG_MODE: print(f"DEBUG ENTITY ATTACK (Self): {entity_runtime_id} - {attack_results['attacker_message']}")
+                
+                if attack_results.get("defender_message"): # Message for the player being attacked
+                    player_target.add_message(attack_results["defender_message"]["text"], attack_results["defender_message"]["type"])
+                
+                if attack_results.get("broadcast_message"): # Message for others in the room
+                    broadcast_to_room(player_target.current_room_id, attack_results["broadcast_message"], "ambient_combat", [player_target.sid]) # Exclude target
+
+                if attack_results.get("defender_defeated", False):
+                    player_target.add_message("You have been struck down!", "event_defeat_major")
+                    # TODO: Implement player death (e.g., move to death room, XP loss, etc.)
+                    # For now, just a message and remove entity from targeting this player
+                    if config.DEBUG_MODE: print(f"DEBUG TICK AI: Player {player_target.name} defeated by {entity_runtime_id}.")
+                    ENTITY_COMBAT_PARTICIPANTS.pop(entity_runtime_id, None) # Entity stops attacking defeated player
+                else:
+                    # Schedule next attack for the entity
+                    base_delay = entity_data.get("attack_delay", 3.0)
+                    combat_state["next_attack_time"] = time.time() + random.uniform(base_delay * 0.8, base_delay * 1.2)
+            
+        # --- END Entity Combat AI Tick ---
+
         current_player_sids_for_processing = list(active_players.keys())
         for sid_player_process in current_player_sids_for_processing:
             player_obj_process = active_players.get(sid_player_process)
-            if not player_obj_process:
-                continue
+            if not player_obj_process: continue
 
-            # --- XP ABSORPTION PHASE ---
             xp_absorption_interval_ticks = getattr(config, 'XP_ABSORPTION_TICKS', 5)
             if game_tick_counter > 0 and game_tick_counter % xp_absorption_interval_ticks == 0:
                 if hasattr(player_obj_process, 'unabsorbed_xp') and player_obj_process.unabsorbed_xp > 0:
@@ -113,31 +187,22 @@ def game_tick_loop():
                     current_player_room_data = GAME_ROOMS.get(current_player_room_id, {})
                     xp_to_absorb_this_event = getattr(config, 'MIN_XP_ABSORBED_PER_EVENT', 1)
                     if hasattr(player_obj_process, 'get_xp_absorption_amount_per_event'):
-                        xp_to_absorb_this_event = player_obj_process.get_xp_absorption_amount_per_event(
-                            current_player_room_data, GAME_RACES
-                        )
-                    if config.DEBUG_MODE:
-                         print(f"{log_time_prefix} - XP_ABSORB_ATTEMPT: Player {player_obj_process.name} (RoomID: {current_player_room_id}) "
-                               f"has {player_obj_process.unabsorbed_xp} UXPs. Attempting to absorb: {xp_to_absorb_this_event} UXPs.")
+                        xp_to_absorb_this_event = player_obj_process.get_xp_absorption_amount_per_event(current_player_room_data, GAME_RACES)
+                    if config.DEBUG_MODE: print(f"{log_time_prefix} - XP_ABSORB_ATTEMPT: Player {player_obj_process.name} (RoomID: {current_player_room_id}) has {player_obj_process.unabsorbed_xp} UXPs. Attempting to absorb: {xp_to_absorb_this_event} UXPs.")
                     amount_to_absorb = min(player_obj_process.unabsorbed_xp, xp_to_absorb_this_event)
                     if amount_to_absorb > 0:
                         player_obj_process.xp = getattr(player_obj_process, 'xp', 0) + amount_to_absorb
                         player_obj_process.unabsorbed_xp -= amount_to_absorb
                         player_obj_process.add_message(f"You feel more experienced as knowledge settles in your mind (+{amount_to_absorb} XP).", "xp_absorb")
-                        if hasattr(player_obj_process, '_check_and_send_mind_status'):
-                             player_obj_process._check_and_send_mind_status(GAME_RACES)
-                        if config.DEBUG_MODE:
-                            print(f"{log_time_prefix} - XP_ABSORBED: Player {player_obj_process.name} absorbed {amount_to_absorb} XP. "
-                                  f"Total XP: {player_obj_process.xp}, UXPs Pool: {player_obj_process.unabsorbed_xp}")
+                        if hasattr(player_obj_process, '_check_and_send_mind_status'): player_obj_process._check_and_send_mind_status(GAME_RACES)
+                        if config.DEBUG_MODE: print(f"{log_time_prefix} - XP_ABSORBED: Player {player_obj_process.name} absorbed {amount_to_absorb} XP. Total XP: {player_obj_process.xp}, UXPs Pool: {player_obj_process.unabsorbed_xp}")
                         xp_needed_config = getattr(config, 'XP_LEVEL_THRESHOLDS', {})
                         xp_needed_for_next_level = xp_needed_config.get(player_obj_process.level + 1, (player_obj_process.level ** 2) * 100 + 100)
                         if player_obj_process.xp >= xp_needed_for_next_level:
                             player_obj_process.level += 1
                             player_obj_process.add_message(f"**Congratulations! You have reached level {player_obj_process.level}!**", "level_up_major")
-                            if hasattr(player_obj_process, 'calculate_derived_stats'):
-                                player_obj_process.calculate_derived_stats(GAME_RACES, GAME_ITEMS) # Pass GAME_ITEMS
-                            if hasattr(player_obj_process, 'calculate_training_points'):
-                                player_obj_process.calculate_training_points(GAME_RACES)
+                            if hasattr(player_obj_process, 'calculate_derived_stats'): player_obj_process.calculate_derived_stats(GAME_RACES, GAME_ITEMS)
+                            if hasattr(player_obj_process, 'calculate_training_points'): player_obj_process.calculate_training_points(GAME_RACES)
                             if hasattr(player_obj_process, 'hp') and hasattr(player_obj_process, 'max_hp'): player_obj_process.hp = player_obj_process.max_hp
                             if hasattr(player_obj_process, 'mp') and hasattr(player_obj_process, 'max_mp'): player_obj_process.mp = player_obj_process.max_mp
                             if hasattr(player_obj_process, 'sp') and hasattr(player_obj_process, 'max_sp'): player_obj_process.sp = player_obj_process.max_sp
@@ -147,7 +212,7 @@ def game_tick_loop():
             if getattr(config, 'SEND_CLIENT_TICK_MARKERS', False):
                 client_tick_marker_interval = getattr(config, 'CLIENT_TICK_MARKER_INTERVAL', getattr(config, 'XP_ABSORPTION_TICKS', 5))
                 if client_tick_marker_interval > 0 and game_tick_counter > 0 and game_tick_counter % client_tick_marker_interval == 0:
-                    player_obj_process.add_message(">", "system_tick_marker") # Player sees this as ">"
+                    player_obj_process.add_message(">", "system_tick_marker") 
 
             messages_to_send = player_obj_process.get_queued_messages()
             if messages_to_send:
