@@ -53,56 +53,47 @@
         }
         /* Message Type Styling examples */
         .message-echo {} 
-        .message-error, .message-error_rt, .message-error_critical { color: #ff6b6b; font-weight: bold; }
-        .message-feedback { color: #8fbc8f; } /* Softer green */
-        .message-feedback_move { color: #a2faa3; } /* Slightly brighter green for movement */
-        .message-event_highlight, .message-system_highlight { color: #ffd700; font-weight: bold; } /* Gold/Yellow */
-        .message-system, .message-prompt { color: #add8e6; } /* Light blue */
-        .message-stat_increase { color: #40e0d0; } /* Turquoise */
-        .message-speech_player { color: #87cefa; font-style: italic; } /* Light sky blue */
-        .message-speech_other { color: #dda0dd; font-style: italic; } /* Plum */
-        .message-ambient_npc { color: #a9a9a9; font-style: italic; }  /* Dark gray */
-        .message-ambient_monster { color: #d2b48c; font-style: italic; } /* Tan */
-        .message-ambient_other_player, 
-        .message-ambient_player_arrival, 
-        .message-ambient_player_departure { color: #c8a2c8; font-style: italic; } /* Thistle */
-        .message-event_monster_arrival { color: #ff7f50; font-weight: bold; font-style: italic;} /* Coral */
+        .message-error, .message-error_rt, .message-error_critical, .message-error_pvp, .message-error_move, .message-error_dev { color: #ff6b6b; font-weight: bold; }
+        .message-feedback, .message-feedback_move, .message-feedback_neutral, .message-feedback_get_item, .message-feedback_search_corpse, .message-feedback_search_empty, .message-feedback_look_target, .message-feedback_read  { color: #8fbc8f; } 
+        .message-event_highlight, .message-system_highlight, .message-level_up_major, .message-event_pvp_victory, .message-event_pvp_defeat_major, .message-event_defeat_corpse, .message-event_defeat, .message-event_defeat_major  { color: #ffd700; font-weight: bold; } 
+        .message-system, .message-prompt, .message-system_warning, .message-system_info, .message-system_info_block { color: #add8e6; } 
+        .message-stat_increase { color: #40e0d0; } 
+        .message-speech_player, .message-dialogue_self { color: #87cefa; font-style: italic; } 
+        .message-speech_other, .message-dialogue_other { color: #dda0dd; font-style: italic; } 
+        .message-ambient_npc, .message-ambient_monster, .message-ambient_other_player, .message-ambient_player_arrival, .message-ambient_player_departure, .message-ambient_combat, .message-ambient_pvp_defeat, .message-ambient_neutral, .message-ambient_spawn, .message-ambient_time, .message-ambient_weather { color: #a9a9a9; font-style: italic; }  
+        .message-event_monster_arrival { color: #ff7f50; font-weight: bold; font-style: italic;} 
         .message-system_tick_marker { color: #666; } 
+        .message-xp_gain, .message-xp_absorb, .message-xp_pool_full, .message-mind_status { color: #b8860b; } /* DarkGoldenRod for XP/Mind */
+        .message-faction_update_positive { color: #32cd32; } /* LimeGreen */
+        .message-faction_update_negative { color: #ff4500; } /* OrangeRed */
+        .message-combat_action_player, .message-combat_hit_player, .message-combat_miss_player, .message-combat_defeat_player, .message-combat_status_target  { color: #ffaf7a; } /* Light Orange/Peach for player combat actions */
+        .message-combat_roll_info_debug { color: #777; font-style: italic; font-size: 0.9em; } /* Greyed out for debug */
+        .message-feedback_loot_drop { color: #4caf50; font-style: italic; } /* Green for loot drops */
+        .message-header_info_block { color: #f0e68c; font-weight: bold; text-decoration: underline;} /* Khaki, bold, underline */
+        .message-info_block_content { color: #e0e0e0; padding-left: 1ch;} /* Light grey, slight indent */
+
         
         /* Room info specific styling */
-        .room-info-container { margin-bottom: 10px; } /* If you wrap room info */
-        .message-room_name_line { color: #00ffff; font-weight: bold; } /* Cyan */
-        .message-room_description { color: #f0f8ff; margin-top: 0px; padding-left: 2ch; } /* Alice blue, indented */
-        .message-room_presence_line { color: #e6e6fa; font-style: italic; } /* Lavender */
-        .message-room_items_line { color: #98fb98; } /* Pale green */
-        .message-room_exits_line { color: #fadadd; margin-top: 5px;} /* Pink */
-        /* Round Time Bar Styles */
+        .room-info-container { margin-bottom: 10px; } 
+        .message-room_name_line { color: #00ffff; font-weight: bold; } 
+        .message-room_description { color: #f0f8ff; margin-top: 0px; padding-left: 2ch; } 
+        .message-room_presence_line { color: #e6e6fa; font-style: italic; } 
+        .message-room_items_line { color: #98fb98; } 
+        .message-room_exits_line { color: #fadadd; margin-top: 5px;} 
+        
         #rt-bar-container {
-            width: 100%;
-            height: 10px; /* Height of the main bar */
-            background-color: #333; /* Background of the empty bar area */
-            margin-top: 5px;
-            border: 1px solid #555;
-            border-radius: 3px;
-            display: flex; /* To line up ticks horizontally */
-            overflow: hidden; /* Hide ticks if they overflow (shouldn't happen) */
-            opacity: 0; /* Initially hidden */
+            width: 100%; height: 10px; background-color: #333; 
+            margin-top: 5px; border: 1px solid #555; border-radius: 3px;
+            display: flex; overflow: hidden; opacity: 0; 
             transition: opacity 0.3s ease-in-out;
         }
-        #rt-bar-container.active {
-            opacity: 1;
-        }
+        #rt-bar-container.active { opacity: 1; }
         .rt-tick {
-            height: 100%;
-            background-color: #c00; /* Red for active ticks */
-            border-right: 1px solid #500; /* Separator for ticks */
-            box-sizing: border-box;
-            transition: width 0.2s linear, opacity 0.3s linear; /* Smooth removal */
+            height: 100%; background-color: #c00; 
+            border-right: 1px solid #500; box-sizing: border-box;
+            transition: width 0.2s linear, opacity 0.3s linear; 
         }
-        .rt-tick.fading {
-            opacity: 0;
-            width: 0 !important; /* Force width to 0 when fading */
-        }
+        .rt-tick.fading { opacity: 0; width: 0 !important; }
 
     </style>
 </head><body>
@@ -124,13 +115,13 @@
     <script>
         const socket = io();
         const output = document.getElementById('output');
-        const commandInput = document.getElementById('input'); // Changed from 'input' to 'commandInput'
+        const commandInput = document.getElementById('input'); 
         const statsArea = document.getElementById('stats-area');
         const rtBarContainer = document.getElementById('rt-bar-container');
 
         const commandHistory = [];
         let historyIndex = -1;
-        let rtIntervalId = null; // To store the interval ID for clearing
+        let rtIntervalId = null; 
 
         console.log("CLIENT: Script loaded.");
 
@@ -148,8 +139,18 @@
             lineDiv.className = 'prefixed-line message-' + type; 
             const prefixSpan = document.createElement('span');
             prefixSpan.className = 'message-prefix';
-            prefixSpan.textContent = '>'; 
-            lineDiv.appendChild(prefixSpan);
+            // Make the prefix conditional for room descriptions if they already contain it
+            if (type === 'room_description' && text.startsWith('[')) { // Heuristic for room name lines
+                 // No prefix for room name line itself if it's formatted like that
+            } else if (type.startsWith('room_') && (type !== 'room_name_line' && type !== 'room_description')) {
+                 // No prefix for other parts of room description if they are distinct lines
+            } else if (type === 'room_name_line') {
+                // No prefix for the room name itself.
+            }
+            else {
+                prefixSpan.textContent = '>'; 
+                lineDiv.appendChild(prefixSpan);
+            }
             const textNode = document.createTextNode(text); 
             lineDiv.appendChild(textNode);
             return lineDiv;
@@ -165,21 +166,23 @@
                 prefixSpan.className = 'message-prefix';
                 prefixSpan.textContent = '>';
                 messageDiv.appendChild(prefixSpan);
-                messageDiv.appendChild(document.createTextNode(String(messageText).substring(1))); 
+                // For echo, text already includes "> ", so remove it from messageText before appending
+                messageDiv.appendChild(document.createTextNode(String(messageText).startsWith("> ") ? String(messageText).substring(2) : String(messageText))); 
                 appendOutput(messageDiv);
                 return;
             }
-            if (type === 'system_tick_marker' && messageText === '>') {
+             if (type === 'system_tick_marker' && messageText === '>') { // For player's own tick marker
                 const messageDiv = document.createElement('div');
                 messageDiv.className = 'message-' + type; 
                 const prefixSpan = document.createElement('span');
                 prefixSpan.className = 'message-prefix'; 
-                prefixSpan.textContent = '>';
+                prefixSpan.textContent = '>'; // This is the actual marker text
                 messageDiv.appendChild(prefixSpan);
+                // No additional text needed for this specific marker type
                 appendOutput(messageDiv);
                 return;
             }
-            // Special handling for round time error messages
+
             if (type === 'error_rt' && messageText.toLowerCase().startsWith('wait')) {
                 const waitTimeMatch = messageText.match(/wait\s*([\d.]+)\s*s/i);
                 if (waitTimeMatch && waitTimeMatch[1]) {
@@ -187,48 +190,62 @@
                     startRoundTimeBar(durationSeconds);
                 }
             }
-
+            
+            // For other messages, split by newline and process each line
             const lines = String(messageText).split('\n'); 
             lines.forEach(line => {
-                appendOutput(createPrefixedMessageLine(line, type));
+                // Adjust prefixing for room info lines
+                if (type.startsWith('room_')) {
+                    const lineDiv = document.createElement('div');
+                    lineDiv.className = 'message-' + type;
+                    // No ">" prefix for specific room lines
+                    lineDiv.textContent = line;
+                    appendOutput(lineDiv);
+                } else {
+                    appendOutput(createPrefixedMessageLine(line, type));
+                }
             });
         }
         
-// In your <script> tag within templates/index.html
-
-    function displayRoomInfo(roomData) {
-            if (!roomData || typeof roomData !== 'object') {
+        function displayRoomInfo(roomData) { 
+            if (!roomData || typeof roomData !== 'object') { 
                 console.error("CLIENT: displayRoomInfo called with invalid data:", roomData);
                 addMessage("Error: Received invalid room data from server.", "error_critical");
                 return;
             }
+            // Display room name without ">"
+            const roomNameDiv = document.createElement('div');
+            roomNameDiv.className = 'message-room_name_line';
+            roomNameDiv.textContent = `[${roomData.name || 'Unknown Room'}]`;
+            appendOutput(roomNameDiv);
 
-            // Display room name
-            appendOutput(createPrefixedMessageLine(`[${roomData.name || 'Unknown Room'}]`, 'room_name_line'));
-
-            // Display room description
+            // Display room description without ">"
             const descDiv = document.createElement('div');
-            descDiv.className = 'message-room_description'; 
+            descDiv.className = 'message-room_description';
             descDiv.textContent = roomData.description || 'No description available.';
-            appendOutput(descDiv); 
-
-            // Display presence summary (NPCs, other players, monsters)
-            if (roomData.presence_summary && roomData.presence_summary.trim().length > 0) {
-                appendOutput(createPrefixedMessageLine(roomData.presence_summary, 'room_presence_line'));
+            appendOutput(descDiv);
+            
+            // Display presence summary (ALSO HERE) without ">"
+            if (roomData.presence_summary && roomData.presence_summary.length > 0) { 
+                const presenceDiv = document.createElement('div');
+                presenceDiv.className = 'message-room_presence_line';
+                presenceDiv.textContent = roomData.presence_summary;
+                appendOutput(presenceDiv);
             }
-
-            // **** THIS IS THE KEY PART FOR DISPLAYING CORPSES/ITEMS ON GROUND ****
-            // The server now sends a pre-formatted "items_summary" string.
-            // This string will either be like "YOU ALSO SEE: Item A, Corpse B." or an empty string if nothing is seen.
-            if (roomData.items_summary && roomData.items_summary.trim().length > 0) {
-                // The createPrefixedMessageLine adds the ">" prefix.
-                // The roomData.items_summary already contains "YOU ALSO SEE: ..."
-                appendOutput(createPrefixedMessageLine(roomData.items_summary, 'room_items_line'));
+            // Display items summary (YOU ALSO SEE) without ">"
+            if (roomData.items_summary && roomData.items_summary.length > 0) {
+                 const itemsDiv = document.createElement('div');
+                 itemsDiv.className = 'message-room_items_line';
+                 itemsDiv.textContent = roomData.items_summary; // Directly use the pre-formatted string
+                 appendOutput(itemsDiv);
             }
-
-            // Display exits
-            appendOutput(createPrefixedMessageLine(`OBVIOUS EXITS: ${roomData.exits || 'None'}`, 'room_exits_line'));
+            // Display exits without ">"
+            const exitsDiv = document.createElement('div');
+            exitsDiv.className = 'message-room_exits_line';
+            exitsDiv.textContent = `OBVIOUS EXITS: ${roomData.exits || 'None'}`;
+            appendOutput(exitsDiv);
         }
+
         function displayRaceOptions(racePayload) { 
             if (!racePayload || typeof racePayload !== 'object') {
                 console.error("CLIENT: displayRaceOptions called with invalid data:", racePayload);
@@ -243,17 +260,17 @@
                 racePayload.races.forEach(race => {
                     addMessage(`${race.name.toUpperCase()} (Type: ${race.key})`, 'system_highlight');
                     addMessage(`  ${race.description}`, 'info'); 
-                    if (race.stat_modifiers && Object.keys(race.stat_modifiers).length > 0) {
-                        let modifiersStr = Object.entries(race.stat_modifiers)
-                            .map(([stat, val]) => `${stat.toUpperCase()} ${val > 0 ? '+' : ''}${val}`)
+                    if (race.stat_modifiers_display && typeof race.stat_modifiers_display === 'object' && Object.keys(race.stat_modifiers_display).length > 0) {
+                        let modifiersStr = Object.entries(race.stat_modifiers_display)
+                            .map(([stat, val_str]) => `${stat.toUpperCase()} ${val_str}`) // val_str is already formatted like "+X" or "-Y"
                             .join(', ');
                         addMessage(`  Stat Modifiers: ${modifiersStr}`, 'feedback');
                     }
-                    if (race.lore_snippet) {
-                        addMessage(`  "${race.lore_snippet}"`, 'narrative_emotive');
+                    if (race.notes) { // Changed from lore_snippet to notes to match creation.py
+                        addMessage(`  "${race.notes}"`, 'narrative_emotive');
                     }
                     const spacer = document.createElement('div'); 
-                    spacer.innerHTML = '&nbsp;';
+                    spacer.innerHTML = '&nbsp;'; // Ensures a visual line break
                     appendOutput(spacer); 
                 });
                 addMessage("---------------------------", "system_highlight");
@@ -262,22 +279,21 @@
             }
         }
 
-        // --- Round Time Bar Logic ---
         function startRoundTimeBar(durationSeconds) {
             if (rtIntervalId) {
-                clearInterval(rtIntervalId); // Clear any existing interval
+                clearInterval(rtIntervalId); 
             }
-            rtBarContainer.innerHTML = ''; // Clear previous ticks
+            rtBarContainer.innerHTML = ''; 
             rtBarContainer.classList.add('active');
-            commandInput.disabled = true; // Disable input during RT
+            commandInput.disabled = true; 
 
-            const totalTicks = Math.max(1, Math.ceil(durationSeconds)); // At least one tick
+            const totalTicks = Math.max(1, Math.ceil(durationSeconds * 5)); // More ticks for smoother look (e.g., 5 per sec)
             const tickDurationMs = (durationSeconds * 1000) / totalTicks;
             
             for (let i = 0; i < totalTicks; i++) {
                 const tickElement = document.createElement('div');
                 tickElement.className = 'rt-tick';
-                tickElement.style.width = `${100 / totalTicks}%`; // Distribute width
+                tickElement.style.width = `${100 / totalTicks}%`; 
                 rtBarContainer.appendChild(tickElement);
             }
 
@@ -285,19 +301,19 @@
             rtIntervalId = setInterval(() => {
                 const ticks = rtBarContainer.querySelectorAll('.rt-tick:not(.fading)');
                 if (ticks.length > 0) {
-                    ticks[ticks.length - 1].classList.add('fading'); // Fade out the last visible tick
+                    ticks[ticks.length - 1].classList.add('fading'); 
                 }
                 ticksToRemove--;
                 if (ticksToRemove <= 0) {
                     clearInterval(rtIntervalId);
                     rtIntervalId = null;
-                    setTimeout(() => { // Delay hiding to allow fade out
+                    setTimeout(() => { 
                         rtBarContainer.classList.remove('active');
-                        rtBarContainer.innerHTML = ''; // Clear fully
+                        rtBarContainer.innerHTML = ''; 
                         commandInput.disabled = false;
                         commandInput.focus();
                         console.log("CLIENT: Round time finished.");
-                    }, 300); // Match transition duration
+                    }, 300); 
                 }
             }, tickDurationMs);
         }
@@ -306,7 +322,7 @@
         commandInput.addEventListener('keypress', (event) => {
             if (event.key === 'Enter') {
                 const command = commandInput.value;
-                if (command && !commandInput.disabled) { // Check if input is enabled
+                if (command && !commandInput.disabled) { 
                     if (commandHistory.length === 0 || command !== commandHistory[commandHistory.length - 1]) {
                         commandHistory.push(command);
                     }
@@ -317,10 +333,9 @@
                 }
             }
         });
-        // ... (keydown for history remains same) ...
         commandInput.addEventListener('keydown', (event) => {
             if (commandInput.disabled && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-                event.preventDefault(); return; // Prevent history navigation if disabled
+                event.preventDefault(); return; 
             }
             if (commandHistory.length === 0 && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
                  event.preventDefault(); return;
@@ -352,7 +367,7 @@
         socket.on('disconnect', (reason) => { 
             console.error("CLIENT: Socket disconnected. Reason:", reason);
             addMessage(`Disconnected from server. Reason: ${reason}`, 'error_critical'); 
-            if (rtIntervalId) clearInterval(rtIntervalId); // Clear RT bar on disconnect
+            if (rtIntervalId) clearInterval(rtIntervalId); 
             rtBarContainer.classList.remove('active');
             commandInput.disabled = false;
         });
@@ -383,13 +398,8 @@
         
         socket.on('stats_update', (data) => {
             console.log("CLIENT: Received 'stats_update':", data);
-            if (data) {
-                let statsText = "Stats: "; 
-                if (data.raw_stats && typeof data.raw_stats === 'object') { 
-                    statsText = `Name: ${data.raw_stats.name || '-'} | Lvl: ${data.raw_stats.level || '-'} | XP: ${data.raw_stats.xp || '-'}/- (Pool: -)<br>HP: ${data.raw_stats.hp || '-'}/${data.raw_stats.max_hp || '-'} | MP: ${data.raw_stats.mp || '-'}/${data.raw_stats.max_mp || '-'} | SP: ${data.raw_stats.sp || '-'}/${data.raw_stats.max_sp || '-'} | Gold: -<br>RT: -`;
-                } else if (data.stats_text) { 
-                    statsText = data.stats_text;
-                }
+            if (data && data.raw_stats && typeof data.raw_stats === 'object') { 
+                let statsText = `Name: ${data.raw_stats.name || '-'} | Lvl: ${data.raw_stats.level || '-'} | XP: ${data.raw_stats.xp || '-'}/- (Pool: ${data.raw_stats.unabsorbed_xp || 0})<br>HP: ${data.raw_stats.hp || '-'}/${data.raw_stats.max_hp || '-'} | MP: ${data.raw_stats.mp || '-'}/${data.raw_stats.max_mp || '-'} | SP: ${data.raw_stats.sp || '-'}/${data.raw_stats.max_sp || '-'} | Gold: -<br>Mind: ${data.raw_stats.mind_status || '-'}`;
                 statsArea.innerHTML = statsText; 
             }
         });

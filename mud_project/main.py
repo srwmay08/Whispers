@@ -1,3 +1,4 @@
+# main.py
 # mud_project/main.py
 import os
 import sys
@@ -8,6 +9,7 @@ import traceback
 import datetime
 import pytz
 import math # Ensure math is imported
+import re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -80,11 +82,12 @@ def game_tick_loop():
         )
         respawn_check_interval = getattr(config, 'MONSTER_RESPAWN_TICK_INTERVAL', 6)
         if game_tick_counter > 0 and game_tick_counter % respawn_check_interval == 0:
+            # Call process_respawns with all required arguments
             respawn_system.process_respawns(
                 log_time_prefix, game_time_utc_now, TRACKED_DEFEATED_ENTITIES,
                 GAME_ROOMS, GAME_NPCS, GAME_MONSTER_TEMPLATES,
                 broadcast_to_room,
-                combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM, 
+                combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM, # From combat.py
                 GAME_EQUIPMENT_TABLES,
                 GAME_ITEMS
             )
@@ -101,6 +104,8 @@ def game_tick_loop():
             player_obj_process = active_players.get(sid_player_process)
             if not player_obj_process:
                 continue
+
+            # --- XP ABSORPTION PHASE ---
             xp_absorption_interval_ticks = getattr(config, 'XP_ABSORPTION_TICKS', 5)
             if game_tick_counter > 0 and game_tick_counter % xp_absorption_interval_ticks == 0:
                 if hasattr(player_obj_process, 'unabsorbed_xp') and player_obj_process.unabsorbed_xp > 0:
@@ -130,7 +135,7 @@ def game_tick_loop():
                             player_obj_process.level += 1
                             player_obj_process.add_message(f"**Congratulations! You have reached level {player_obj_process.level}!**", "level_up_major")
                             if hasattr(player_obj_process, 'calculate_derived_stats'):
-                                player_obj_process.calculate_derived_stats(GAME_RACES, GAME_ITEMS)
+                                player_obj_process.calculate_derived_stats(GAME_RACES, GAME_ITEMS) # Pass GAME_ITEMS
                             if hasattr(player_obj_process, 'calculate_training_points'):
                                 player_obj_process.calculate_training_points(GAME_RACES)
                             if hasattr(player_obj_process, 'hp') and hasattr(player_obj_process, 'max_hp'): player_obj_process.hp = player_obj_process.max_hp
@@ -139,11 +144,10 @@ def game_tick_loop():
                             send_player_stats_update(player_obj_process)
                             if config.DEBUG_MODE: print(f"{log_time_prefix} - LEVEL_UP: Player {player_obj_process.name} reached level {player_obj_process.level}.")
 
-            if getattr(config, 'SEND_CLIENT_TICK_MARKERS', False): # Check config
+            if getattr(config, 'SEND_CLIENT_TICK_MARKERS', False):
                 client_tick_marker_interval = getattr(config, 'CLIENT_TICK_MARKER_INTERVAL', getattr(config, 'XP_ABSORPTION_TICKS', 5))
                 if client_tick_marker_interval > 0 and game_tick_counter > 0 and game_tick_counter % client_tick_marker_interval == 0:
-                    if config.DEBUG_MODE: print(f"{log_time_prefix} - TICK_MARKER: Sending to {player_obj_process.name}") # Debug
-                    player_obj_process.add_message(">", "system_tick_marker")
+                    player_obj_process.add_message(">", "system_tick_marker") # Player sees this as ">"
 
             messages_to_send = player_obj_process.get_queued_messages()
             if messages_to_send:
@@ -177,7 +181,7 @@ def get_opposite_direction(direction: str) -> str:
 def send_player_stats_update(player_object: player_class.Player):
     if player_object and hasattr(player_object, 'sid') and player_object.sid:
         try:
-            client_data = {"raw_stats": player_object.get_client_data(GAME_RACES, GAME_ITEMS)}
+            client_data = {"raw_stats": player_object.get_client_data(GAME_RACES, GAME_ITEMS)} # Pass GAME_ITEMS
             socketio.emit('stats_update', client_data, room=player_object.sid)
         except Exception as e:
             print(f"Error sending stats update for SID {player_object.sid}: {e}")
@@ -187,13 +191,12 @@ def send_room_description(player_object: player_class.Player):
     current_room_id = getattr(player_object, 'current_room_id', config.DEFAULT_START_ROOM_ID)
     if not isinstance(current_room_id, int):
         try: current_room_id = int(current_room_id)
-        except ValueError: current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1)
+        except ValueError: current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1) # Ensure fallback
         player_object.current_room_id = current_room_id
-    
     room_data = GAME_ROOMS.get(current_room_id)
     if not room_data:
         player_object.add_message(f"Error: You are in an unknown room (ID: {current_room_id})! Moving to safety...", "error_critical")
-        player_object.current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1)
+        player_object.current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1) # Ensure fallback
         if player_handler: player_handler.save_player(player_object)
         room_data = GAME_ROOMS.get(player_object.current_room_id)
         if not room_data:
@@ -203,22 +206,45 @@ def send_room_description(player_object: player_class.Player):
     final_room_description = environment_system.get_description_for_room(room_data)
     all_present_names = [p.name for sid, p in active_players.items() if hasattr(p, 'current_room_id') and p.current_room_id == current_room_id and sid != player_object.sid]
 
+    # Display NPCs
     for npc_key in room_data.get("npcs", []):
         npc_template = GAME_NPCS.get(npc_key)
-        if npc_template and not combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(npc_key):
+        if npc_template and not combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(npc_key): # Check if recently defeated
             all_present_names.append(npc_template.get("name", npc_key))
 
+    # Display Monsters
     alive_monster_counts = {}
     monster_names_list_for_room_desc = []
-    active_monsters_in_room = []
-    for i, monster_tpl_key_or_runtime_id in enumerate(room_data.get("monsters", [])):
-        monster_template = GAME_MONSTER_TEMPLATES.get(monster_tpl_key_or_runtime_id)
+    active_monsters_in_room = [] # Store templates of active monsters
+
+    # Iterate over monster keys/IDs defined in the room's "monsters" list
+    # This list should ideally represent active monster instances or their unique runtime IDs.
+    # For this example, we'll assume it's a list of template keys and derive conceptual runtime IDs
+    # for checking defeat status, as in the original combat log.
+    for i, monster_key_or_runtime_id in enumerate(room_data.get("monsters", [])):
+        # Determine the template key from monster_key_or_runtime_id
+        # This part might need adjustment based on how you store/manage monster instances.
+        # If monster_key_or_runtime_id is already a runtime ID:
+        #   monster_template_key = parse_template_key_from_runtime_id(monster_key_or_runtime_id)
+        # If it's a template key:
+        monster_template_key = monster_key_or_runtime_id
+
+        monster_template = GAME_MONSTER_TEMPLATES.get(monster_template_key)
         if monster_template:
-            monster_runtime_id_to_check = f"{current_room_id}_{monster_tpl_key_or_runtime_id}_{i}"
-            if not combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(monster_runtime_id_to_check):
-                active_monsters_in_room.append(monster_template)
-                base_name = monster_template.get("name", monster_tpl_key_or_runtime_id)
-                alive_monster_counts[base_name] = alive_monster_counts.get(base_name, 0) + 1
+            # Construct a conceptual runtime_id for checking defeat.
+            # This needs to be consistent with how runtime_ids are generated/used elsewhere (e.g., in combat).
+            # If your room_data.monsters already holds unique runtime IDs, use those directly.
+            # If it holds template keys, you need a way to map to the specific instance's defeat status.
+            # For the example based on logs, using room_id + template_key + index.
+            conceptual_runtime_id_for_check = f"{current_room_id}_{monster_template_key}_{i}"
+
+            if not combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(conceptual_runtime_id_for_check):
+                active_monsters_in_room.append(monster_template) # Add template for now
+
+    # Now, count and format names for display
+    for monster_template_active in active_monsters_in_room:
+        base_name = monster_template_active.get("name", "a creature")
+        alive_monster_counts[base_name] = alive_monster_counts.get(base_name, 0) + 1
 
     processed_for_display_in_room_desc = {}
     for monster_template_active in active_monsters_in_room:
@@ -232,55 +258,56 @@ def send_room_description(player_object: player_class.Player):
 
     if monster_names_list_for_room_desc:
         all_present_names.extend(monster_names_list_for_room_desc)
+
+
     all_present_names.sort()
     present_entities_str = "ALSO HERE: " + ", ".join(all_present_names) + "." if all_present_names else ""
 
-    if config.DEBUG_MODE:
-        print(f"--- DEBUG SEND_ROOM_DESC (Room ID: {current_room_id}) ---")
-        print(f"  Static items in room_data['items']: {room_data.get('items', [])}")
-        print(f"  Dynamic objects in room_data['objects'] (keys): {list(room_data.get('objects', {}).keys())}")
-
+    # Display items and dynamic objects
     visible_item_names = []
-    for item_id_static in room_data.get("items", []):
+    if config.DEBUG_MODE:
+        debug_msg = f"--- DEBUG SEND_ROOM_DESC (Room ID: {current_room_id}) ---\n"
+        debug_msg += f"  Static items in room_data['items']: {room_data.get('items', [])}\n"
+        debug_msg += f"  Dynamic objects in room_data['objects'] (keys): {list(room_data.get('objects', {}).keys())}\n"
+
+    for item_id_static in room_data.get("items", []): # Static items
         item_tpl_static = GAME_ITEMS.get(item_id_static)
         if item_tpl_static:
-            item_name_log = item_tpl_static.get("name", item_id_static)
-            visible_item_names.append(item_name_log)
-            if config.DEBUG_MODE: print(f"  Added static item to visible: '{item_name_log}'")
+            visible_item_names.append(item_tpl_static.get("name", item_id_static))
+            if config.DEBUG_MODE: debug_msg += f"  Added static item to visible: '{item_tpl_static.get('name', item_id_static)}'\n"
 
-    for obj_id, obj_data_dynamic in room_data.get("objects", {}).items():
-        obj_name_log = obj_data_dynamic.get("name", "unnamed object")
-        is_corpse_log = obj_data_dynamic.get("is_corpse", False)
-        is_ground_item_log = obj_data_dynamic.get("is_ground_item", False)
+
+    for obj_id_dyn, obj_data_dynamic in room_data.get("objects", {}).items(): # Dynamic objects like corpses, ground items
         if config.DEBUG_MODE:
-            print(f"  Checking dynamic object ID '{obj_id}': Name='{obj_name_log}', is_corpse={is_corpse_log}, is_ground_item={is_ground_item_log}")
-        if is_corpse_log or is_ground_item_log:
-            visible_item_names.append(obj_name_log)
-            if config.DEBUG_MODE: print(f"    Added dynamic object to visible: '{obj_name_log}' (Corpse: {is_corpse_log}, GroundItem: {is_ground_item_log})")
+            debug_msg += f"  Checking dynamic object ID '{obj_id_dyn}': Name='{obj_data_dynamic.get('name', 'N/A')}', is_corpse={obj_data_dynamic.get('is_corpse', False)}, is_ground_item={obj_data_dynamic.get('is_ground_item', False)}\n"
+        if obj_data_dynamic.get("is_corpse") or obj_data_dynamic.get("is_ground_item"):
+            visible_item_names.append(obj_data_dynamic.get("name", "an object"))
+            if config.DEBUG_MODE:
+                debug_msg += f"    Added dynamic object to visible: '{obj_data_dynamic.get('name', 'an object')}' (Corpse: {obj_data_dynamic.get('is_corpse', False)}, GroundItem: {obj_data_dynamic.get('is_ground_item', False)})\n"
 
-    for feature_key, feature_data in room_data.get("defined_objects", {}).items(): # Corrected variable name
-        feature_name_log = feature_data.get("name", "unnamed feature")
-        visible_item_names.append(feature_name_log)
-        if config.DEBUG_MODE: print(f"  Added feature to visible: '{feature_name_log}'")
 
     items_on_ground_str = ""
     if visible_item_names:
-        unique_sorted_names = sorted(list(set(visible_item_names)))
-        items_on_ground_str = "YOU ALSO SEE: " + ", ".join(unique_sorted_names) + "."
-        if config.DEBUG_MODE: print(f"  Final 'YOU ALSO SEE' string: {items_on_ground_str}")
-    elif config.DEBUG_MODE:
-        print("  No items/objects for 'YOU ALSO SEE'.")
-        
+        # Sort and uniqueify, then join
+        sorted_unique_items = sorted(list(set(visible_item_names)))
+        items_on_ground_str = "YOU ALSO SEE: " + ", ".join(sorted_unique_items) + "."
+    
+    if config.DEBUG_MODE:
+        debug_msg += f"  Final 'YOU ALSO SEE' string: {items_on_ground_str if items_on_ground_str else 'YOU ALSO SEE: (nothing)'}\n"
+        debug_msg += "--- END DEBUG SEND_ROOM_DESC ---"
+        print(debug_msg)
+
+
     room_data_payload = {
         "name": room_data.get("name", "Nowhere Special"),
         "description": final_room_description,
         "presence_summary": present_entities_str,
-        "items_summary": items_on_ground_str, # This is what the client should use
+        "items_summary": items_on_ground_str, 
         "exits": ", ".join(k.upper() for k in room_data.get("exits", {}).keys()) or "None",
         "type": "room_data_update"
     }
     player_object.add_message(room_data_payload)
-    if config.DEBUG_MODE: print(f"--- END DEBUG SEND_ROOM_DESC ---")
+
 
 @socketio.on('connect')
 def handle_connect():
@@ -338,7 +365,6 @@ def finalize_character_creation(sid, player_shell: player_class.Player, game_rac
     player_shell.hp = getattr(player_shell, 'max_hp', 10)
     player_shell.mp = getattr(player_shell, 'max_mp', 0)
     player_shell.sp = getattr(player_shell, 'max_sp', 0)
-    player_shell.gold = 0 # Initialize gold
 
     if hasattr(player_shell, 'calculate_training_points'):
         player_shell.calculate_training_points(game_races_data)
@@ -359,124 +385,196 @@ def finalize_character_creation(sid, player_shell: player_class.Player, game_rac
         player_shell.add_message(error_msg, "error_critical")
         emit('game_messages', {'messages': player_shell.get_queued_messages()}, room=sid)
 
+
+# Helper function to add an item object to the room (if not already there)
 def add_item_object_to_room(room_data, item_id, game_items_data):
     item_template = game_items_data.get(item_id)
     if not item_template:
         if config.DEBUG_MODE: print(f"DEBUG ADD_ITEM_TO_ROOM: Item template for '{item_id}' not found.")
         return None
+
     ground_item_instance_id = f"ground_{item_id}_{int(time.time())}_{random.randint(1000,9999)}"
+    
     item_object_data = {
-        "id": ground_item_instance_id, "item_template_id": item_id,
+        "id": ground_item_instance_id,
+        "item_template_id": item_id, # Store the original template ID
         "name": item_template.get("name", item_id),
         "description": item_template.get("look_description_ground", item_template.get("description", "An item lies here.")),
-        "keywords": item_template.get("keywords", []) + [item_template.get("name", item_id).lower()],
-        "is_ground_item": True, "is_container": item_template.get("is_container", False),
+        "keywords": list(set(item_template.get("keywords", []) + [item_template.get("name", item_id).lower(), item_id.lower()])), # Ensure name and ID are keywords
+        "is_ground_item": True,
+        "is_container": item_template.get("is_container", False),
         "inventory": list(item_template.get("inventory", [])) if item_template.get("is_container") else [],
         "created_at": time.time()
     }
-    if room_data: # Ensure room_data is not None
-        room_data.setdefault("objects", {})[ground_item_instance_id] = item_object_data
-        if config.DEBUG_MODE:
-            print(f"DEBUG ADD_ITEM_TO_ROOM: Added '{item_object_data['name']}' (ID: {ground_item_instance_id}) to room {room_data.get('id')}.")
-    else:
-        if config.DEBUG_MODE: print(f"DEBUG ADD_ITEM_TO_ROOM: room_data is None. Cannot add item '{item_id}'.")
-        return None
+    
+    room_data.setdefault("objects", {})[ground_item_instance_id] = item_object_data
+    if config.DEBUG_MODE:
+        print(f"DEBUG ADD_ITEM_TO_ROOM: Added '{item_object_data['name']}' (ID: {ground_item_instance_id}) to room {room_data.get('id')}.")
     return item_object_data
 
 def find_combat_target_in_room(player_object: player_class.Player, target_name_query: str, room_data: dict):
-    if not target_name_query or not room_data: return None, None, None, None
+    if not target_name_query: return None, None, None, None
     target_name_lower = target_name_query.lower()
     current_room_id = player_object.current_room_id
+    if not isinstance(current_room_id, int):
+        try: current_room_id = int(current_room_id)
+        except ValueError: current_room_id = 0
 
+    # Priority 1: Find other players
     for other_sid, other_player_obj in active_players.items():
         if other_sid != player_object.sid and \
            hasattr(other_player_obj, 'current_room_id') and other_player_obj.current_room_id == current_room_id and \
            hasattr(other_player_obj, 'name') and other_player_obj.name.lower() == target_name_lower:
-            return other_player_obj, "player", other_player_obj.sid, None
+            return other_player_obj, "player", other_player_obj.sid, None # Target is player obj, type, sid, full_match_data (None for players)
 
+    # Priority 2: Find NPCs
     for npc_key in room_data.get("npcs", []):
         npc_template = GAME_NPCS.get(npc_key)
         if npc_template:
             name_lower = npc_template.get("name", "").lower()
             keywords = [k.lower() for k in npc_template.get("keywords", [])]
-            if name_lower == target_name_lower or target_name_lower in keywords or npc_key.lower() == target_name_lower:
-                if combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(npc_key): continue
-                return npc_template, "npc", npc_key, None
+            # Allow targeting by "timothy" even if full name is "Timothy the Town Crier"
+            partial_name_match = any(part == target_name_lower for part in name_lower.split())
+
+            if name_lower == target_name_lower or target_name_lower in keywords or npc_key.lower() == target_name_lower or partial_name_match:
+                if combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(npc_key): # Check if NPC is defeated by its key
+                    if config.DEBUG_MODE: print(f"DEBUG TARGETING: NPC '{npc_key}' is recently defeated. Skipping.")
+                    continue
+                return npc_template, "npc", npc_key, {"runtime_id": npc_key, "template": npc_template} # Key is runtime_id for NPCs
+
+    # Priority 3: Find Monsters
+    # This needs to iterate through *active* monster instances in the room.
+    # The server log showed this structure for monsters in room.objects:
+    #   Dynamic objects in room_data['objects'] (keys): ['well', 'notice_board', 'corpse_town_crier_timothy_1747482344']
+    # Monsters are not listed in room_data["objects"] in the logs provided initially.
+    # They are listed in room_data.get("monsters", []) which seems to be template keys.
+    # We need a robust way to get runtime IDs for monsters.
 
     query_base_name = target_name_lower
-    query_instance_num = None
-    parts = target_name_lower.split()
-    if len(parts) > 1 and parts[-1].isdigit():
-        try:
-            num_part = int(parts[-1])
-            if num_part > 0: query_instance_num = num_part; query_base_name = " ".join(parts[:-1])
-        except ValueError: pass
+    query_instance_num_str = None # e.g. "goblin 2" -> "2"
+    
+    # Check for "name <number>" pattern, e.g., "goblin 2"
+    match_numbered = re.match(r"(.+?)\s*(\d+)$", target_name_lower)
+    if match_numbered:
+        query_base_name = match_numbered.group(1).strip()
+        query_instance_num_str = match_numbered.group(2)
 
-    living_monster_matches = []
-    for i, m_tpl_key in enumerate(room_data.get("monsters", [])):
-        m_template = GAME_MONSTER_TEMPLATES.get(m_tpl_key)
-        if not m_template: continue
-        m_name_lower = m_template.get("name", "").lower()
-        m_keywords = [k.lower() for k in m_template.get("keywords", [])]
-        runtime_id = f"{current_room_id}_{m_tpl_key}_{i}"
-        if not combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(runtime_id):
-            if m_name_lower == query_base_name or query_base_name in m_keywords or m_tpl_key.lower() == query_base_name:
-                living_monster_matches.append({
-                    "template": m_template, "type": "monster", "key": m_tpl_key,
-                    "runtime_id": runtime_id, "instance_index_in_room_list": i
-                })
-    if not living_monster_matches: return None, None, None, None
-    if query_instance_num is not None:
-        count = 0
-        for m_match in living_monster_matches:
-            if m_match["template"].get("name","").lower() == query_base_name or \
-               query_base_name in [k.lower() for k in m_match["template"].get("keywords",[])]:
-                count += 1
-                if count == query_instance_num: return m_match["template"], m_match["type"], m_match["key"], m_match
+    # Collect all monsters of the base name that are alive
+    matching_alive_monsters = []
+    current_monster_index_for_naming = {} # To keep track of "goblin 1", "goblin 2" for targeting
+
+    for i, monster_template_key in enumerate(room_data.get("monsters", [])):
+        monster_template = GAME_MONSTER_TEMPLATES.get(monster_template_key)
+        if not monster_template:
+            continue
+
+        # THIS IS A CONCEPTUAL RUNTIME ID - ENSURE IT MATCHES COMBAT AND RESPAWN LOGIC
+        # This needs to be the ID used in RECENTLY_DEFEATED_TARGETS_IN_ROOM
+        monster_runtime_id = f"{current_room_id}_{monster_template_key}_{i}" # Example
+
+        if combat.RECENTLY_DEFEATED_TARGETS_IN_ROOM.get(monster_runtime_id):
+            if config.DEBUG_MODE: print(f"DEBUG TARGETING: Monster '{monster_runtime_id}' is recently defeated. Skipping.")
+            continue # Skip defeated monsters
+
+        monster_name_lower = monster_template.get("name", "").lower()
+        monster_keywords = [k.lower() for k in monster_template.get("keywords", [])]
+        
+        # Match base name (e.g., "goblin" from "goblin archer" if query is "goblin")
+        # or full name, or keyword
+        if monster_name_lower == query_base_name or \
+           query_base_name in monster_keywords or \
+           monster_template_key.lower() == query_base_name or \
+           any(part == query_base_name for part in monster_name_lower.split()):
+            
+            current_monster_index_for_naming[monster_name_lower] = current_monster_index_for_naming.get(monster_name_lower, 0) + 1
+            instance_num_assigned = current_monster_index_for_naming[monster_name_lower]
+
+            # Store with enough info to select later
+            matching_alive_monsters.append({
+                "template": monster_template,
+                "type": "monster",
+                "key": monster_template_key, # Original template key
+                "runtime_id": monster_runtime_id, # The ID used for tracking defeat
+                "instance_num_in_room_for_targeting": instance_num_assigned, # e.g., 1 for first "goblin", 2 for second
+                "original_index_in_room_list": i # Original index from room_data.get("monsters", [])
+            })
+
+    if not matching_alive_monsters:
         return None, None, None, None
+
+    # If a number was specified (e.g., "goblin 2")
+    if query_instance_num_str:
+        target_instance_num = int(query_instance_num_str)
+        for m_match in matching_alive_monsters:
+            # Check if the monster's assigned instance number for its type matches the query
+            if m_match["instance_num_in_room_for_targeting"] == target_instance_num:
+                # Additionally, ensure the base name matches (e.g., "goblin 2" should match a goblin, not "rat 2" if "rat 2" was queried)
+                # This check is implicitly handled by the query_base_name filtering earlier.
+                return m_match["template"], m_match["type"], m_match["key"], m_match # Return full match data
+        return None, None, None, None # Specific numbered instance not found
     else:
-        m_match = living_monster_matches[0]
-        return m_match["template"], m_match["type"], m_match["key"], m_match
+        # No number specified, return the first match
+        m_match = matching_alive_monsters[0]
+        return m_match["template"], m_match["type"], m_match["key"], m_match # Return full match data
+
+    return None, None, None, None
+
 
 def find_object_in_room(player_obj, target_name_query: str, room_data_dict: dict):
     if not target_name_query or not room_data_dict: return None, None
     target_lower = target_name_query.lower()
 
+    # Priority 1: Dynamic Room Objects (corpses, items on ground from room_data["objects"])
     for obj_id, obj_data in room_data_dict.get("objects", {}).items():
         obj_name_lower = obj_data.get("name", "").lower()
-        name_match = obj_name_lower == target_lower
-        keywords = [k.lower() for k in obj_data.get("keywords", [])]
-        keyword_match = target_lower in keywords
-        id_match = obj_id.lower() == target_lower
-        original_name_or_generic_corpse_match = False
+        obj_keywords = [k.lower() for k in obj_data.get("keywords", [])]
+        
+        # Direct name match or keyword match for dynamic objects
+        if obj_name_lower == target_lower or target_lower in obj_keywords:
+            return obj_id, obj_data
+        
+        # Specific match for corpses by original name (e.g., "search timothy" for "corpse of timothy")
         if obj_data.get("is_corpse"):
             original_name = obj_data.get("original_name", "").lower()
             if target_lower == "corpse" or target_lower == original_name or target_lower in original_name.split():
-                original_name_or_generic_corpse_match = True
-        is_ground_item_name_match = False
+                return obj_id, obj_data
+        
+        # Match ground items by their template ID as well
         if obj_data.get("is_ground_item"):
-            item_template_id = obj_data.get("item_template_id", "")
-            if target_lower == item_template_id.lower(): is_ground_item_name_match = True
-        if name_match or keyword_match or id_match or original_name_or_generic_corpse_match or is_ground_item_name_match:
-            return obj_id, obj_data
+            item_template_id = obj_data.get("item_template_id", "").lower()
+            if target_lower == item_template_id:
+                return obj_id, obj_data
 
+
+    # Priority 2: Static items in room (room_data["items"])
+    # These are typically referenced by their item_id or name/keywords from GAME_ITEMS
     for item_id_static in room_data_dict.get("items", []):
         item_template = GAME_ITEMS.get(item_id_static)
         if item_template:
             item_name_lower = item_template.get("name", "").lower()
             item_keywords = [k.lower() for k in item_template.get("keywords", [])]
             if item_name_lower == target_lower or target_lower in item_keywords or item_id_static.lower() == target_lower:
-                return item_id_static, {"id": item_id_static, "name": item_template.get("name"),
-                                        "description": item_template.get("description", "It's an item."),
-                                        "is_static_item": True, "keywords": item_keywords}
-    for feature_key, feature_data in room_data_dict.get("defined_objects", {}).items():
-        feature_name_lower = feature_data.get("name", "").lower()
-        feature_keywords = [k.lower() for k in feature_data.get("keywords", [])]
-        if feature_key.lower() == target_lower or feature_name_lower == target_lower or target_lower in feature_keywords:
-            return feature_key, feature_data
+                return item_id_static, { # Return a consistent dict structure
+                    "id": item_id_static,
+                    "name": item_template.get("name"),
+                    "description": item_template.get("description", "It's an item."),
+                    "is_static_item": True, # Mark it as a static item from the room list
+                    "keywords": item_keywords,
+                    "item_template_id": item_id_static # For consistency with ground items
+                }
+
+    # Priority 3: Defined Room Features (from room_data["defined_objects"] or "objects" if that's where features live)
+    # Assuming features might also be in room_data["objects"] and not corpse/ground_item
+    for obj_id, obj_data in room_data_dict.get("objects", {}).items():
+        if not obj_data.get("is_corpse") and not obj_data.get("is_ground_item"): # If it's not a corpse or ground item
+            obj_name_lower = obj_data.get("name", "").lower()
+            obj_keywords = [k.lower() for k in obj_data.get("keywords", [])]
+            if obj_name_lower == target_lower or target_lower in obj_keywords or obj_id.lower() == target_lower:
+                return obj_id, obj_data
+            
     return None, None
 
-# CORRECTED AND RESTRUCTURED handle_player_command
+
 @socketio.on('player_command')
 def handle_player_command(data):
     sid = request.sid
@@ -488,13 +586,13 @@ def handle_player_command(data):
         player = active_players.get(sid)
         session = player_creation_sessions.get(sid)
 
-        if player: # Player is active and logged in
+        if player:
             player.add_message(f"> {command_input}", "echo")
             if hasattr(player, 'next_action_time') and time.time() < player.next_action_time:
                 player.add_message(f"Wait {max(0.0, round(player.next_action_time - time.time(), 1))}s.", "error_rt")
             else:
                 parts = command_input.lower().split(" ", 1)
-                verb = parts[0] 
+                verb = parts[0]
                 raw_target_arg = parts[1].strip() if len(parts) > 1 else None
                 target_arg = None 
 
@@ -502,19 +600,13 @@ def handle_player_command(data):
                     if verb == "say":
                         target_arg = parts[1].strip() 
                     else:
-                        look_verbs = ["look", "l", "examine", "ex", "exa", "look at"] # Added "look at"
-                        action_verbs_with_target = [
-                            "search", "attack", "get", "take", "drop", "talk", "give",
-                            "open", "close", "enter", "use", "read", "cast", "climb",
-                            "skin", "equip", "unequip", "wear", "remove"
-                        ]
-                        if verb in look_verbs and raw_target_arg.startswith("at ") and len(raw_target_arg) > 3: # For "look at X"
+                        look_verbs = ["look", "l", "examine", "ex", "exa"]
+                        # Allow "look at <target>" by stripping "at "
+                        if verb in look_verbs and raw_target_arg.lower().startswith("at ") and len(raw_target_arg) > 3:
                             target_arg = raw_target_arg[3:].strip()
-                        elif verb in action_verbs_with_target or verb in look_verbs:
+                        else:
                             target_arg = raw_target_arg
-                        elif raw_target_arg: 
-                             target_arg = raw_target_arg
-
+                
                 if config.DEBUG_MODE: print(f"DEBUG CMD PARSED: Verb='{verb}', TargetArg='{target_arg}' (RawTarget='{raw_target_arg}')")
                 
                 room_id_before_move = player.current_room_id
@@ -532,240 +624,350 @@ def handle_player_command(data):
                         if all_msgs_panic: socketio.emit('game_messages', {'messages': all_msgs_panic}, room=sid)
                         return 
                     send_room_description(player) 
-                    all_msgs_after_move = player.get_queued_messages()
-                    if all_msgs_after_move: socketio.emit('game_messages', {'messages': all_msgs_after_move}, room=sid)
-                    send_player_stats_update(player)
-                    return
-
-                # --- START OF PLAYER-COMMAND IF/ELIF CHAIN ---
+                
+                # --- START OF COMMAND HANDLING CHAIN ---
                 if verb == "attack":
                     action_taken = True
                     rt_look = config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
                     rt_attack = config.ROUNDTIME_DEFAULTS.get('roundtime_attack', 3.0)
                     if not target_arg:
-                        player.add_message("Attack whom or what?", "error"); player.next_action_time = time.time() + rt_look
+                        player.add_message("Attack whom or what?", "error")
+                        player.next_action_time = time.time() + rt_look
+                    elif not current_room_data: 
+                        player.add_message("You can't attack anything in the void.", "error")
+                        player.next_action_time = time.time() + rt_look
                     else:
                         target_data, target_type, target_id_or_key, target_full_match_data = find_combat_target_in_room(player, target_arg, current_room_data)
                         if target_data:
                             if target_type == "player":
-                                target_player_object = target_data
-                                if not current_room_data.get("pvp", getattr(config, 'PVP_ENABLED_ROOM_TAG', False)): # Check room PVP flag
+                                target_player_object = target_data 
+                                if not current_room_data.get("pvp", False):
                                     player.add_message("You cannot engage in combat with other adventurers here.", "error_pvp")
+                                    player.next_action_time = time.time() + rt_look
                                 elif target_player_object.sid == player.sid:
                                      player.add_message("Attacking yourself seems unproductive.", "feedback_neutral")
+                                     player.next_action_time = time.time() + rt_look
                                 else: 
-                                    player.add_message("PvP combat is not yet fully implemented.", "error_dev") # Placeholder for PvP
-                                player.next_action_time = time.time() + rt_attack
+                                    if config.DEBUG_MODE: print(f"DEBUG PVP: {player.name} initiating attack on {target_player_object.name}")
+                                    combat_results = {} 
+                                    try:
+                                        combat_results = combat.handle_pvp_attack(player, target_player_object, GAME_ITEMS)
+                                    except AttributeError:
+                                        player.add_message("PvP combat system is not yet fully implemented.", "error_dev")
+                                        if config.DEBUG_MODE: print("DEBUG PVP: combat.handle_pvp_attack is not yet implemented.")
+                                    except Exception as pvp_e:
+                                        player.add_message("An error occurred during PvP combat.", "error_critical")
+                                        if config.DEBUG_MODE: print(f"ERROR PVP combat: {pvp_e}"); traceback.print_exc()
+                                    if combat_results:
+                                        if combat_results.get('attacker_messages'):
+                                            for msg in combat_results['attacker_messages']: player.add_message(msg['text'], msg['type'])
+                                        if combat_results.get('target_messages'):
+                                            for msg in combat_results['target_messages']: target_player_object.add_message(msg['text'], msg['type'])
+                                        if combat_results.get('room_messages'):
+                                            for msg_info in combat_results['room_messages']:
+                                                broadcast_to_room(player.current_room_id, msg_info['text'], msg_info['type'], exclude_sids=[player.sid, target_player_object.sid])
+                                        if combat_results.get('defeated_player_sid'):
+                                            defeated_player = active_players.get(combat_results['defeated_player_sid'])
+                                            if defeated_player:
+                                                player.add_message(f"You have defeated {defeated_player.name}!", "event_pvp_victory")
+                                                defeated_player.add_message(f"You have been defeated by {player.name}!", "event_pvp_defeat_major")
+                                                broadcast_to_room(player.current_room_id, f"{defeated_player.name} falls in battle to {player.name}!", "ambient_pvp_defeat", [player.sid, defeated_player.sid])
+                                    player.next_action_time = time.time() + rt_attack
+                                    if target_player_object and target_player_object.sid in active_players and (not combat_results or not combat_results.get('defeated_player_sid')):
+                                        target_player_object.next_action_time = time.time() + rt_attack
                             elif target_type == "monster" or target_type == "npc":
-                                monster_runtime_id_for_combat = target_id_or_key 
-                                if target_type == "monster" and target_full_match_data:
-                                    monster_runtime_id_for_combat = target_full_match_data.get("runtime_id", target_id_or_key)
-                                combat_results = combat.handle_player_attack(player, target_data, target_type, target_arg, GAME_ITEMS, monster_runtime_id=monster_runtime_id_for_combat)
+                                monster_runtime_id_for_combat = target_id_or_key # For NPCs, key is runtime_id
+                                if target_type == "monster" and target_full_match_data and "runtime_id" in target_full_match_data:
+                                    monster_runtime_id_for_combat = target_full_match_data["runtime_id"]
+                                
+                                combat_results = combat.handle_player_attack(
+                                    player, target_data, target_type, target_arg, GAME_ITEMS,
+                                    monster_runtime_id=monster_runtime_id_for_combat 
+                                )
                                 if combat_results.get('broadcast_message'): broadcast_to_room(player.current_room_id, combat_results['broadcast_message'], "ambient_combat", [player.sid])
                                 if combat_results.get('defeated') and not combat_results.get('already_defeated'):
-                                    # ... (Corpse creation, XP, faction, respawn logic from your file) ...
                                     defeated_runtime_id_from_combat = combat_results.get('target_runtime_id')
                                     target_display_name_from_combat = combat_results.get('target_name', 'the creature')
-                                    defeated_entity_template = target_data
+                                    defeated_entity_template = target_data 
+                                    
+                                    if config.DEBUG_MODE: print(f"DEBUG MAIN_DEFEAT: {player.name} def. {target_display_name_from_combat} (Key:{target_id_or_key}, RuntimeID: {defeated_runtime_id_from_combat})")
+
                                     if defeated_entity_template:
-                                        xp_to_award = defeated_entity_template.get("xp_value", defeated_entity_template.get("xp_on_kill", 0))
-                                        if xp_to_award > 0 : player.add_xp_to_pool(xp_to_award, GAME_RACES)
-                                        for hit_faction in defeated_entity_template.get("faction_hits_on_kill", []):
-                                            if isinstance(hit_faction, dict) and hit_faction.get("faction_id") and isinstance(hit_faction.get("amount"), int):
-                                                player.update_faction(hit_faction["faction_id"], hit_faction["amount"])
+                                        xp_to_award = defeated_entity_template.get("xp_value", defeated_entity_template.get("xp_on_kill", 0)) 
+                                        if xp_to_award > 0 and hasattr(player, 'add_xp_to_pool'): player.add_xp_to_pool(xp_to_award, GAME_RACES)
+                                        
+                                        for hit in defeated_entity_template.get("faction_hits_on_kill", []):
+                                            if isinstance(hit, dict) and hit.get("faction_id") and isinstance(hit.get("amount"), int):
+                                                if hasattr(player, 'update_faction'): player.update_faction(hit["faction_id"], hit["amount"])
+                                        
                                         if defeated_entity_template.get("leaves_corpse", True):
-                                            corpse_data = loot_handler.create_corpse_object_data(defeated_entity_template, defeated_runtime_id_from_combat, GAME_ITEMS)
-                                            if corpse_data and current_room_data:
+                                            corpse_data = loot_handler.create_corpse_object_data(
+                                                defeated_entity_template,
+                                                defeated_runtime_id_from_combat, 
+                                                GAME_ITEMS
+                                            )
+                                            if corpse_data and current_room_data: 
                                                 current_room_data.setdefault("objects", {})[corpse_data["id"]] = corpse_data
                                                 player.add_message(f"The {target_display_name_from_combat} slumps, leaving a corpse.", "event_defeat_corpse")
-                                        # ... (Respawn logic)
+                                        else: 
+                                            player.add_message(f"The {target_display_name_from_combat} collapses into nothingness!", "event_defeat")
+                                    else: 
+                                         player.add_message(f"You defeated {target_display_name_from_combat}, but its essence fades.", "event_defeat_major")
+
+                                    if defeated_runtime_id_from_combat and defeated_entity_template:
+                                        spawn_cfg = defeated_entity_template.get("spawn_config", {}) 
+                                        if not spawn_cfg and target_type == "monster": 
+                                            spawn_cfg = {"respawn_time_seconds": defeated_entity_template.get("respawn_time_seconds"),
+                                                         "spawn_chance": defeated_entity_template.get("respawn_chance"),
+                                                         "home_room_id": defeated_entity_template.get("home_room_id")}
+                                        respawn_time_val = spawn_cfg.get("respawn_time_seconds")
+                                        if respawn_time_val is not None:
+                                            home_room_id_for_respawn = spawn_cfg.get("home_room_id", player.current_room_id)
+                                            TRACKED_DEFEATED_ENTITIES[defeated_runtime_id_from_combat] = {
+                                                "eligible_at": time.time() + float(respawn_time_val),
+                                                "room_id": home_room_id_for_respawn,
+                                                "template_key": target_id_or_key, 
+                                                "type": target_type,
+                                                "is_unique": defeated_entity_template.get("is_unique", False),
+                                                "chance": float(spawn_cfg.get("spawn_chance", getattr(config, 'DEFAULT_RESPAWN_CHANCE', 0.2))),
+                                                # Store original_index_in_room_list if available from target_full_match_data for monsters
+                                                "original_index_in_room_list": target_full_match_data.get("original_index_in_room_list") if target_full_match_data else None
+                                            }
+                                            if config.DEBUG_MODE: print(f"DEBUG MAIN_RESPAWN: Added '{defeated_runtime_id_from_combat}' to TRACKED_DEFEATED_ENTITIES for respawn.")
                                 player.next_action_time = time.time() + rt_attack
-                            else: player.add_message("You can't attack that!", "error"); player.next_action_time = time.time() + rt_look
-                        else: player.add_message(f"You don't see '{target_arg}' to attack.", "error"); player.next_action_time = time.time() + rt_look
+                            else: 
+                                player.add_message("You can't attack that!", "error")
+                                player.next_action_time = time.time() + rt_look
+                        else: 
+                            player.add_message(f"You don't see '{target_arg}' to attack.", "error")
+                            player.next_action_time = time.time() + rt_look
                 
                 elif verb == "equip" or verb == "wear":
                     action_taken = True
                     rt_equip = config.ROUNDTIME_DEFAULTS.get('roundtime_action_short', 1.0)
-                    player.next_action_time = time.time() + rt_equip
                     if not target_arg:
                         player.add_message(f"{verb.capitalize()} what? (e.g., {verb} rusty_sword mainhand)", "error")
                     else:
                         parts_equip = target_arg.split(" ", 1)
-                        item_query_from_player = parts_equip[0] 
-                        item_query_lower = item_query_from_player.lower()
-                        slot_to_equip_player_input = parts_equip[1].lower().strip() if len(parts_equip) > 1 else None
-                        actual_item_id_to_equip = None
+                        item_query = parts_equip[0].lower() 
+                        slot_to_equip_to = parts_equip[1].lower().strip() if len(parts_equip) > 1 else None
 
-                        if item_query_lower in player.inventory and GAME_ITEMS.get(item_query_lower): # Check by ID
-                            actual_item_id_to_equip = item_query_lower
-                        if not actual_item_id_to_equip: # Check by name
+                        actual_item_id_to_equip = None
+                        if item_query in player.inventory and GAME_ITEMS.get(item_query):
+                            actual_item_id_to_equip = item_query
+                        
+                        if not actual_item_id_to_equip: 
                             for item_id_in_inv in player.inventory:
-                                item_template_inv = GAME_ITEMS.get(item_id_in_inv)
-                                if item_template_inv and item_template_inv.get("name", "").lower() == item_query_lower:
-                                    actual_item_id_to_equip = item_id_in_inv; break
-                        if not actual_item_id_to_equip: # Check by keyword
-                            for item_id_in_inv in player.inventory:
-                                item_template_inv = GAME_ITEMS.get(item_id_in_inv)
-                                if item_template_inv and item_query_lower in [k.lower() for k in item_template_inv.get("keywords", [])]:
-                                    actual_item_id_to_equip = item_id_in_inv; break
+                                item_template = GAME_ITEMS.get(item_id_in_inv)
+                                if item_template and item_template.get("name", "").lower() == item_query:
+                                    actual_item_id_to_equip = item_id_in_inv
+                                    break
                         
                         if not actual_item_id_to_equip:
-                            player.add_message(f"You don't have a '{item_query_from_player}'.", "error")
-                        else:
-                            final_slot_to_use = None 
-                            if slot_to_equip_player_input: 
-                                if slot_to_equip_player_input in config.EQUIPMENT_SLOTS.keys():
-                                    final_slot_to_use = slot_to_equip_player_input
+                            player.add_message(f"You don't have a '{parts_equip[0]}'.", "error")
+                        elif not slot_to_equip_to:
+                            item_template_for_slot = GAME_ITEMS.get(actual_item_id_to_equip)
+                            if item_template_for_slot:
+                                preferred_slots = item_template_for_slot.get("slot", [])
+                                if not isinstance(preferred_slots, list): preferred_slots = [preferred_slots]
+                                
+                                if preferred_slots and preferred_slots[0] in config.EQUIPMENT_SLOTS:
+                                    slot_to_equip_to = preferred_slots[0]
                                 else:
-                                    player.add_message(f"'{parts_equip[1]}' is not a valid slot.", "error")
-                            else: 
-                                item_template_for_inference = GAME_ITEMS.get(actual_item_id_to_equip)
-                                if item_template_for_inference:
-                                    preferred_item_slots = item_template_for_inference.get("slot", [])
-                                    if not isinstance(preferred_item_slots, list): preferred_item_slots = [preferred_item_slots]
-                                    if preferred_item_slots and preferred_item_slots[0] in config.EQUIPMENT_SLOTS.keys():
-                                        final_slot_to_use = preferred_item_slots[0]
-                                    else:
-                                        player.add_message(f"{verb.capitalize()} the {item_template_for_inference.get('name',item_query_from_player)} where?", "error")
-                                else:
-                                    player.add_message(f"Error with '{item_query_from_player}' for slot inference.", "error_critical")
-                            
-                            if actual_item_id_to_equip and final_slot_to_use: 
-                                if hasattr(player, 'equip_item'):
-                                    player.equip_item(actual_item_id_to_equip, final_slot_to_use, GAME_ITEMS, GAME_RACES)
-                                else:
-                                    player.add_message("Player equipment system error.", "error_critical")
+                                    player.add_message(f"{verb.capitalize()} it where? (e.g., {verb} {parts_equip[0]} mainhand). Valid slots: {', '.join(config.EQUIPMENT_SLOTS.keys())}", "error")
+                            else: player.add_message("Item error.", "error_critical")
+                        
+                        if actual_item_id_to_equip and slot_to_equip_to:
+                            if slot_to_equip_to not in config.EQUIPMENT_SLOTS:
+                                player.add_message(f"'{slot_to_equip_to}' is not a valid equipment slot. Valid slots: {', '.join(config.EQUIPMENT_SLOTS.keys())}", "error")
+                            elif hasattr(player, 'equip_item'):
+                                player.equip_item(actual_item_id_to_equip, slot_to_equip_to, GAME_ITEMS, GAME_RACES)
+                            else: player.add_message("Equipment system error.", "error_critical")
+                    player.next_action_time = time.time() + rt_equip
 
                 elif verb == "unequip" or verb == "remove":
                     action_taken = True
-                    # ... (Your unequip logic - ensure player.next_action_time is set)
-                    player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_action_short', 1.0)
-
-
-                elif verb == "loot": 
-                    action_taken = True 
-                    if not target_arg: 
-                        player.add_message("Loot what? (e.g., loot corpse or loot <target>)", "error") # Updated prompt
-                        player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
-                    else: 
-                        verb = "search" 
+                    rt_unequip = config.ROUNDTIME_DEFAULTS.get('roundtime_action_short', 1.0)
+                    if not target_arg:
+                        player.add_message(f"{verb.capitalize()} what? (e.g., {verb} mainhand or {verb} rusty_sword)", "error")
+                    elif hasattr(player, 'unequip_item'):
+                        slot_or_item_name_query = target_arg.lower()
+                        unequipped_successfully = False
+                        
+                        found_item_to_unequip_slot = None
+                        for slot_key_check, item_id_check in player.equipped_items.items():
+                            if item_id_check:
+                                item_template_check = GAME_ITEMS.get(item_id_check)
+                                if item_template_check and item_template_check.get("name","").lower() == slot_or_item_name_query:
+                                    found_item_to_unequip_slot = slot_key_check
+                                    break
+                        if found_item_to_unequip_slot:
+                             if player.unequip_item(found_item_to_unequip_slot, GAME_ITEMS, GAME_RACES):
+                                unequipped_successfully = True
+                        
+                        if not unequipped_successfully and slot_or_item_name_query in config.EQUIPMENT_SLOTS:
+                            if player.unequip_item(slot_or_item_name_query, GAME_ITEMS, GAME_RACES):
+                                unequipped_successfully = True
+                        
+                        if not unequipped_successfully:
+                             player.add_message(f"You are not wearing '{target_arg}' or '{target_arg}' is not a valid slot to unequip from directly.", "error")
+                    else: player.add_message("Equipment system error.", "error_critical")
+                    player.next_action_time = time.time() + rt_unequip
                 
-                if verb == "search": 
-                    action_taken = True 
-                    rt_search_default = getattr(config, 'SEARCH_BASE_ROUNDTIME', 1.5)
+                elif verb == "search":
+                    action_taken = True
+                    rt_search_default = getattr(config, 'SEARCH_BASE_ROUNDTIME', 1.5) 
                     perception_stat = player.stats.get(getattr(config, 'STAT_FOR_SEARCH_TIME_REDUCTION', 'perception'), 0)
                     reduction_per_10_points = getattr(config, 'SEARCH_PERCEPTION_REDUCTION_PER_10POINTS', 0.5)
                     time_reduction = (perception_stat // 10) * reduction_per_10_points
                     final_search_rt = max(getattr(config, 'SEARCH_MIN_ROUNDTIME_SECONDS', 0.5), rt_search_default - time_reduction)
-                    player.next_action_time = time.time() + min(final_search_rt, getattr(config, 'SEARCH_MAX_ROUNDTIME_SECONDS', 5.0))
+                    final_search_rt = min(final_search_rt, getattr(config, 'SEARCH_MAX_ROUNDTIME_SECONDS', 5.0))
+                    player.next_action_time = time.time() + final_search_rt
 
-                    if not target_arg: 
+                    if not target_arg:
                         player.add_message("Search what?", "error")
+                    elif not current_room_data: 
+                        player.add_message("You can't search anything here.", "error")
                     else:
-                        obj_id, obj_data = find_object_in_room(player, target_arg, current_room_data)
-                        if obj_data:
-                            target_display_name_search = obj_data.get("name", target_arg)
-                            if obj_data.get("is_corpse"):
-                                if obj_data.get("searched_and_emptied"):
-                                    player.add_message(f"The {target_display_name_search} has been thoroughly searched.", "feedback_neutral")
-                                else:
-                                    player.add_message(f"You search the {target_display_name_search}...", "feedback_search_corpse")
-                                    items_moved_to_ground_names = []
-                                    rolled_gold_search = 0 
-                                    corpse_inventory_ids = obj_data.get("inventory", []) 
-                                    original_template_key = obj_data.get("original_template_key") 
-                                    original_template_type = obj_data.get("original_template_type") 
-                                    defeated_entity_template_for_gold = None
-                                    if original_template_type == "npc": defeated_entity_template_for_gold = GAME_NPCS.get(original_template_key)
-                                    elif original_template_type == "monster": defeated_entity_template_for_gold = GAME_MONSTER_TEMPLATES.get(original_template_key)
+                        # First, try to find if the target is a living NPC/Monster
+                        target_entity_data_search, entity_type_search, _, _ = find_combat_target_in_room(player, target_arg, current_room_data)
+                        if target_entity_data_search and entity_type_search != "player": # Can't search other players this way
+                            player.add_message("You can only search corpses or containers that can be opened.", "error")
+                        else: # Not a living NPC/Monster, proceed to find object/corpse
+                            obj_id, obj_data = find_object_in_room(player, target_arg, current_room_data)
+                            if obj_data:
+                                target_display_name_search = obj_data.get("name", target_arg)
+                                if obj_data.get("is_corpse"):
+                                    if obj_data.get("searched_and_emptied"): 
+                                        player.add_message(f"The {target_display_name_search} has already been thoroughly searched and emptied.", "feedback_neutral")
+                                    else:
+                                        corpse_inventory_ids = obj_data.get("inventory", [])
+                                        if corpse_inventory_ids:
+                                            player.add_message(f"You search the {target_display_name_search}...", "feedback_search_corpse")
+                                            items_moved_to_ground_names = []
+                                            for item_id_on_corpse in list(corpse_inventory_ids): 
+                                                item_object_placed = add_item_object_to_room(current_room_data, item_id_on_corpse, GAME_ITEMS)
+                                                if item_object_placed:
+                                                    items_moved_to_ground_names.append(item_object_placed.get("name", item_id_on_corpse))
+                                                    if item_id_on_corpse in obj_data["inventory"]: 
+                                                        obj_data["inventory"].remove(item_id_on_corpse)
+                                            if items_moved_to_ground_names:
+                                                player.add_message("...and its contents spill onto the ground:", "event_highlight")
+                                                for name_loot in items_moved_to_ground_names: player.add_message(f"- A {name_loot}", "feedback_loot_drop")
+                                                # Call send_room_description after items are spilled
+                                                if config.DEBUG_MODE: print("DEBUG SEARCH: Calling send_room_description after items spilled.")
+                                                send_room_description(player)
 
-                                    if defeated_entity_template_for_gold:
-                                        gold_min = defeated_entity_template_for_gold.get("gold_min", 0)
-                                        gold_max = defeated_entity_template_for_gold.get("gold_max", 0)
-                                        if gold_max >= gold_min and gold_max > 0: 
-                                            rolled_gold_search = random.randint(gold_min, gold_max)
-                                            if rolled_gold_search > 0:
-                                                player.gold = getattr(player, 'gold', 0) + rolled_gold_search
-                                                player.add_message(f"You find {rolled_gold_search} gold coins.", "feedback_loot_coins")
-                                                send_player_stats_update(player) 
-                                    
-                                    items_found_on_corpse_messages = []
-                                    if corpse_inventory_ids:
-                                        for item_id_on_corpse in list(corpse_inventory_ids):
-                                            item_object_placed = add_item_object_to_room(current_room_data, item_id_on_corpse, GAME_ITEMS)
-                                            if item_object_placed:
-                                                items_moved_to_ground_names.append(item_object_placed.get("name", item_id_on_corpse))
-                                                items_found_on_corpse_messages.append(f"- A {item_object_placed.get('name', item_id_on_corpse)}.")
-                                                if item_id_on_corpse in obj_data["inventory"]: obj_data["inventory"].remove(item_id_on_corpse)
-                                    
-                                    if items_found_on_corpse_messages:
-                                        player.add_message("It had the following items on it:", "event_highlight")
-                                        for msg_item in items_found_on_corpse_messages: player.add_message(msg_item, "feedback_loot_item")
-                                    
-                                    if not items_found_on_corpse_messages and not (rolled_gold_search > 0):
-                                        player.add_message("...but find nothing of value.", "feedback_search_empty")
-                                    elif not items_found_on_corpse_messages and (rolled_gold_search > 0):
-                                        player.add_message("...and nothing else of value.", "feedback_neutral")
 
-                                    obj_data["searched_and_emptied"] = True 
-                                    obj_data["description"] = f"The searched and looted remains of {obj_data.get('original_name', 'a creature')}."
-                                    if items_moved_to_ground_names:
-                                        if config.DEBUG_MODE: print(f"DEBUG SEARCH: Calling send_room_description after items spilled.")
-                                        send_room_description(player) 
-                            elif obj_data.get("actions") and "search" in obj_data.get("actions", {}):
-                                player.add_message(f"You search the {target_display_name_search}...", "feedback_neutral")
-                                player.add_message("...but find nothing immediately obvious.", "feedback_search_empty")
+                                            else: 
+                                                 player.add_message("...but find nothing of value that could be retrieved.", "feedback_search_empty")
+                                            obj_data["searched_and_emptied"] = True 
+                                            obj_data["description"] = f"The searched and looted remains of {obj_data.get('original_name', 'a creature')}." 
+                                        else: 
+                                            player.add_message(f"You search the {target_display_name_search} but find nothing of value.", "feedback_search_empty")
+                                            obj_data["searched_and_emptied"] = True
+                                elif obj_data.get("actions") and "search" in obj_data.get("actions", {}):
+                                    player.add_message(f"You search the {target_display_name_search}...", "feedback_neutral")
+                                    player.add_message("...but find nothing immediately obvious.", "feedback_search_empty") 
+                                else: 
+                                    player.add_message(f"You find nothing special by searching the {target_display_name_search}.", "feedback_search_empty")
                             else: 
-                                player.add_message(f"You find nothing special by searching the {target_display_name_search}.", "feedback_search_empty")
-                        else: 
-                            player.add_message(f"You don't see '{target_arg}' to search here.", "error")
+                                player.add_message(f"You don't see '{target_arg}' to search here.", "error")
                 
                 elif verb in ["get", "take"]:
                     action_taken = True
-                    # ... (your get/take logic, ensure RT is set) ...
-                    player.next_action_time = time.time() + getattr(config, 'GET_BASE_ROUNDTIME', 0.5)
+                    rt_get_default = getattr(config, 'ROUNDTIME_DEFAULTS', {}).get('roundtime_get', 0.5)
+                    player.next_action_time = time.time() + rt_get_default
+                    if not target_arg: player.add_message(f"{verb.capitalize()} what?", "error")
+                    elif not current_room_data: player.add_message("There's nothing here to get.", "error")
+                    else:
+                        item_name_query_get = target_arg
+                        container_name_query_get = None
+                        if " from " in target_arg.lower():
+                            parts_get = target_arg.split(" from ", 1)
+                            item_name_query_get = parts_get[0].strip()
+                            container_name_query_get = parts_get[1].strip()
 
-                elif verb in ["look", "l", "examine", "ex", "exa"]: # "look at" handled by target_arg parsing
+                        if len(player.inventory) >= getattr(config, 'MAX_INVENTORY_SIZE', 20):
+                            player.add_message("Your inventory is full.", "error")
+                        elif container_name_query_get:
+                            container_id_get, container_data_get = find_object_in_room(player, container_name_query_get, current_room_data)
+                            if container_data_get and (container_data_get.get("is_corpse") or container_data_get.get("is_container")):
+                                container_inventory_ids_get = container_data_get.get("inventory", [])
+                                item_found_in_container_get = None; item_id_to_remove_from_container_get = None
+                                
+                                # Attempt to find first item matching query in container
+                                items_matching_in_container = []
+                                for item_id_in_inv_get in list(container_inventory_ids_get):
+                                    item_tpl_cont_get = GAME_ITEMS.get(item_id_in_inv_get)
+                                    if item_tpl_cont_get and (item_tpl_cont_get.get("name","").lower() == item_name_query_get.lower() or \
+                                                          item_name_query_get.lower() in [k.lower() for k in item_tpl_cont_get.get("keywords",[])] or \
+                                                          item_id_in_inv_get.lower() == item_name_query_get.lower()):
+                                        items_matching_in_container.append((item_tpl_cont_get, item_id_in_inv_get))
+                                
+                                if items_matching_in_container:
+                                    item_found_in_container_get, item_id_to_remove_from_container_get = items_matching_in_container[0] # Take the first match
+                                    player.inventory.append(item_id_to_remove_from_container_get)
+                                    player.add_message(f"You get the {item_found_in_container_get.get('name', item_name_query_get)} from the {container_data_get.get('name', container_name_query_get)}.", "feedback_get_item")
+                                    container_data_get["inventory"].remove(item_id_to_remove_from_container_get)
+                                    if not container_data_get["inventory"] and container_data_get.get("is_corpse"): 
+                                        container_data_get["description"] = f"The looted remains of {container_data_get.get('original_name', 'a creature')}."
+                                        container_data_get["searched_and_emptied"] = True 
+                                    send_player_stats_update(player) 
+                                else: player.add_message(f"You don't see a '{item_name_query_get}' in the {container_data_get.get('name', container_name_query_get)}.", "error")
+                            else: player.add_message(f"You don't see a '{container_name_query_get}' to get items from.", "error")
+                        else: 
+                            # Try to get from ground (dynamic objects) first
+                            obj_id_to_get, obj_data_to_get = find_object_in_room(player, item_name_query_get, current_room_data)
+                            
+                            item_taken_successfully = False
+                            if obj_data_to_get:
+                                if obj_data_to_get.get("is_ground_item"): 
+                                    item_template_id_get = obj_data_to_get.get("item_template_id")
+                                    player.inventory.append(item_template_id_get)
+                                    player.add_message(f"You pick up the {obj_data_to_get.get('name', 'item')}.", "feedback_get_item")
+                                    if obj_id_to_get in current_room_data.get("objects", {}): del current_room_data["objects"][obj_id_to_get]
+                                    item_taken_successfully = True
+                                elif obj_data_to_get.get("is_static_item"):
+                                    item_id_static_to_get = obj_data_to_get.get("id") # Static items use their ID
+                                    if item_id_static_to_get in current_room_data.get("items", []):
+                                        player.inventory.append(item_id_static_to_get)
+                                        current_room_data["items"].remove(item_id_static_to_get)
+                                        player.add_message(f"You pick up the {obj_data_to_get.get('name', 'item')}.", "feedback_get_item")
+                                        item_taken_successfully = True
+                                    else: # Should not happen if find_object_in_room worked
+                                        player.add_message(f"It seems the {obj_data_to_get.get('name', 'item')} is no longer here.", "error")
+                                else: # Object found but not gettable (e.g. a feature like "well")
+                                     player.add_message(f"You can't {verb} the {obj_data_to_get.get('name', item_name_query_get)}.", "error")
+                            
+                            if item_taken_successfully:
+                                send_player_stats_update(player)
+                                send_room_description(player) # Refresh room desc after taking item from ground/static list
+                            elif not obj_data_to_get: # No object found at all
+                                player.add_message(f"You don't see '{item_name_query_get}' here to {verb}.", "error")
+                
+                elif verb in ["look", "l", "examine", "exa"]:
                     action_taken = True
                     rt_look_cmd = config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
-                    player.next_action_time = time.time() + rt_look_cmd
-
-                    if target_arg and (target_arg.lower() == "me" or target_arg.lower() == "self" or target_arg.lower() == player.name.lower()):
-                        player.add_message(f"You look at yourself, {player.name}.", "feedback_look_self")
-                        race_name_display = player.race.title()
-                        player_race_data = GAME_RACES.get(player.race) # Get from global
-                        if player_race_data and player_race_data.get('name'):
-                            race_name_display = player_race_data.get('name')
-                        player.add_message(f"You are a {race_name_display}.", "info")
-                        
-                        equipped_items_display = []
-                        for slot_key_disp, item_id_disp in player.equipped_items.items():
-                            if item_id_disp:
-                                item_template_disp = GAME_ITEMS.get(item_id_disp)
-                                item_name_disp = item_template_disp.get("name", item_id_disp) if item_template_disp else item_id_disp
-                                slot_display_name = config.EQUIPMENT_SLOTS.get(slot_key_disp, slot_key_disp).split(" (")[0]
-                                equipped_items_display.append(f"  <{slot_display_name.lower()}> {item_name_disp}")
-                        if equipped_items_display:
-                            player.add_message("You are wearing:", "header_info_block")
-                            for line in sorted(equipped_items_display): player.add_message(line, "info_block_content")
-                        else:
-                            player.add_message("You are not wearing anything of note.", "info_block_content")
-                    elif target_arg and current_room_data:
-                        target_entity_data_look, entity_type_look, _, _ = find_combat_target_in_room(player, target_arg, current_room_data) 
+                    if target_arg and current_room_data:
+                        # Try finding combat target first
+                        target_entity_data_look, entity_type_look, _, _ = find_combat_target_in_room(player, target_arg, current_room_data)
                         if target_entity_data_look:
-                            look_desc_entity = target_entity_data_look.get("look_description", target_entity_data_look.get("description", f"You see {target_entity_data_look.get('name', target_arg)}."))
+                            look_desc_entity = target_entity_data_look.get("look_description", target_entity_data_look.get("description"))
+                            if not look_desc_entity: look_desc_entity = f"You see {target_entity_data_look.get('name', target_arg)}."
                             if entity_type_look in ["npc", "monster"] and target_entity_data_look.get("equipped"):
                                 equipped_str_parts_look = []
-                                for slot_key_look, item_id_look in target_entity_data_look.get("equipped",{}).items():
+                                for slot_key_look, item_id_look in target_entity_data_look["equipped"].items():
                                     if item_id_look:
                                         item_data_look = GAME_ITEMS.get(item_id_look)
                                         if item_data_look:
-                                            slot_name_look = config.EQUIPMENT_SLOTS.get(slot_key_look, slot_key_look).split(" (")[0]
-                                            equipped_str_parts_look.append(f"<{slot_name_look.lower()}> {item_data_look.get('name',item_id_look)}")
+                                            slot_name_for_display = config.EQUIPMENT_SLOTS.get(slot_key_look, slot_key_look)
+                                            # Format for display, e.g., "<Torso> Old Tunic"
+                                            equipped_str_parts_look.append(f"<{slot_name_for_display}> {item_data_look.get('name',item_id_look)}")
                                 if equipped_str_parts_look:
-                                    look_desc_entity += "\nThey are equipped with:\n" + "\n".join(sorted(equipped_str_parts_look))
+                                    look_desc_entity += "\nThey are equipped with:\n" + "\n".join(equipped_str_parts_look)
                             player.add_message(look_desc_entity, "feedback_look_target")
-                        else: 
+                        else: # Not an entity, try object
                             obj_id_look, obj_data_look = find_object_in_room(player, target_arg, current_room_data)
                             if obj_data_look:
                                 look_desc_obj = obj_data_look.get("description", "You see nothing special about it.")
@@ -780,123 +982,190 @@ def handle_player_command(data):
                             else: player.add_message(f"You don't see '{target_arg}' here.", "error")
                     else: 
                         send_room_description(player)
+                    player.next_action_time = time.time() + rt_look_cmd
                 
-                elif verb == "climb": # Specific "climb" verb for object interaction
-                    action_taken = True
-                    rt_climb = config.ROUNDTIME_DEFAULTS.get('roundtime_action_medium', 1.5) 
-                    player.next_action_time = time.time() + rt_climb
-
-                    if not target_arg:
-                        player.add_message("Climb what?", "error")
-                    elif not current_room_data: # Should be caught earlier
-                        player.add_message("There's nothing to climb here.", "error")
-                    else:
-                        # command_input holds the original full command, e.g., "climb rope down"
-                        # target_arg might just be "rope" or "rope down"
-                        # We need to find the object first, then check its actions against the full command or parts of it.
-                        
-                        # Attempt to find object based on the first part of target_arg if multiple words
-                        object_name_to_find = target_arg.split(" ")[0] if target_arg else None
-
-                        if object_name_to_find:
-                            obj_id_climb, obj_data_climb = find_object_in_room(player, object_name_to_find, current_room_data)
-                            
-                            if obj_data_climb and obj_data_climb.get("interactable") and obj_data_climb.get("actions"):
-                                # Try matching the full command input (lowercased) against action keys
-                                specific_action_key = command_input.lower() # e.g. "climb rope down"
-                                
-                                if specific_action_key in obj_data_climb["actions"]:
-                                    action_result = obj_data_climb["actions"][specific_action_key]
-                                    if isinstance(action_result, int): # Room ID for movement
-                                        destination_room_id = action_result
-                                        player.add_message(f"You {specific_action_key}.", "feedback_move") 
-                                        broadcast_to_room(room_id_before_move, f"{player.name} {specific_action_key}.", "ambient_player_action", [sid])
-                                        player.current_room_id = destination_room_id
-                                        new_room_data_check = GAME_ROOMS.get(destination_room_id)
-                                        if new_room_data_check:
-                                            arrival_message = f"{player.name} arrives." 
-                                            if "down" in specific_action_key: arrival_message = f"{player.name} climbs down from above."
-                                            elif "up" in specific_action_key: arrival_message = f"{player.name} climbs up from below."
-                                            broadcast_to_room(destination_room_id, arrival_message, "ambient_player_arrival", [sid])
-                                            send_room_description(player)
-                                        else:
-                                            player.add_message("The way leads nowhere...", "error_move"); player.current_room_id = room_id_before_move
-                                    elif isinstance(action_result, str): # Scripted event
-                                        player.add_message(f"You interact with {obj_data_climb.get('name')}... (Event: '{action_result}' - Not handled).", "feedback_neutral")
-                                    else:
-                                        player.add_message(f"You try to {specific_action_key} the {obj_data_climb.get('name')}, but nothing happens.", "feedback_neutral")
-                                else: # If full action key not found (e.g., player typed "climb rope")
-                                    player.add_message(f"How do you want to climb the {obj_data_climb.get('name')}? (e.g., 'climb rope down')", "error")
-                            else: # Object not found or not interactable for climbing that way
-                                player.add_message(f"You can't '{command_input}' the '{target_arg}'.", "error")
-                        else: # No object specified with climb
-                             player.add_message("Climb what?", "error")
-
-                elif verb == "drop":
-                    action_taken = True
-                    # ... (Your drop logic - ensure player.next_action_time is set) ...
-                    player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_action_short', 0.5)
-
                 elif verb == "say":
-                    action_taken = True; player.next_action_time = time.time() + 0.1 # Quick RT
-                    if target_arg: player.add_message(f"You say, \"{target_arg}\"", "dialogue_self"); broadcast_to_room(player.current_room_id, f"{player.name} says, \"{target_arg}\"", "dialogue_other", [sid])
-                    else: player.add_message("Say what?", "error")
-                elif verb == "quit":
-                    action_taken = True; player.add_message("Quitting...", "system_event"); socketio.disconnect(sid); return 
+                    action_taken = True
+                    if target_arg: 
+                        player.add_message(f"You say, \"{target_arg}\"", "dialogue_self")
+                        broadcast_to_room(player.current_room_id, f"{player.name} says, \"{target_arg}\"", "dialogue_other", [sid])
+                    else: 
+                        player.add_message("Say what?", "error")
+                    player.next_action_time = time.time() + getattr(config, 'ROUNDTIME_DEFAULTS', {}).get('roundtime_say', 0.1)
 
-                elif verb == "inventory" or verb == "i" or verb == "inv": # Added "inv"
-                    action_taken = True; player.next_action_time = time.time() + 0.1
+                elif verb == "quit":
+                    action_taken = True
+                    player.add_message("Quitting...", "system_event")
+                    socketio.disconnect(sid) 
+                    return 
+
+                # --- GENERAL INFO COMMANDS ---
+                elif verb == "inventory" or verb == "i" or verb == "inv":
+                    action_taken = True
                     if player.inventory:
                         player.add_message("--- Your Inventory ---", "header_info_block")
                         item_counts = {}
-                        for item_id_inv in player.inventory: item_counts[item_id_inv] = item_counts.get(item_id_inv, 0) + 1
-                        for item_id_counted, count in item_counts.items():
+                        for item_id_inv in player.inventory:
+                            item_counts[item_id_inv] = item_counts.get(item_id_inv, 0) + 1
+                        
+                        for item_id_counted, count in sorted(item_counts.items()): # Sort for consistent display
                             item_template_inv = GAME_ITEMS.get(item_id_counted)
                             display_name = item_template_inv.get("name", item_id_counted) if item_template_inv else item_id_counted
                             player.add_message(f"- {display_name}{f' (x{count})' if count > 1 else ''}", "info_block_content")
-                    else: player.add_message("Your inventory is empty.", "feedback_neutral")
+                    else:
+                        player.add_message("Your inventory is empty.", "feedback_neutral")
+                    player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
                 
+                elif verb == "read":
+                    action_taken = True
+                    if not target_arg: player.add_message("Read what?", "error")
+                    else:
+                        item_to_read_id = None
+                        # Check inventory for the item by name or ID
+                        for item_id_inv in player.inventory:
+                            item_template = GAME_ITEMS.get(item_id_inv)
+                            if item_template and (item_template.get("name", "").lower() == target_arg.lower() or item_id_inv.lower() == target_arg.lower()):
+                                item_to_read_id = item_id_inv
+                                break
+                        if item_to_read_id:
+                            item_data_read = GAME_ITEMS.get(item_to_read_id)
+                            if item_data_read and item_data_read.get("type") == "readable" and item_data_read.get("readable_text"):
+                                player.add_message(f"You read the {item_data_read.get('name', 'scroll')}:\n{item_data_read['readable_text']}", "feedback_read")
+                            elif item_data_read:
+                                player.add_message(f"You can't read the {item_data_read.get('name', 'item')}.", "error")
+                            else: # Should not happen if found in inventory
+                                player.add_message("Error reading item.", "error_critical")
+                        else:
+                            player.add_message(f"You don't have a '{target_arg}' to read.", "error")
+                    player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_action_short', 1.0)
+
+
                 elif verb == "help" or verb == "commands":
-                    action_taken = True; player.next_action_time = time.time() + 0.1
+                    action_taken = True
                     player.add_message("--- Common Commands ---", "header_info_block")
-                    # ... (your list of help commands) ...
-                    player.add_message("look [target|me|self], get <item>, drop <item>, inv, attack <target>, equip <item> [slot], unequip <item|slot>, search <target>, say <msg>, exits, stats, hp, mp, xp, factions, quit, climb <object> [direction]", "info_block_content")
+                    player.add_message("look (l) [target] - Examine the room or a target.", "info_block_content")
+                    player.add_message("get/take <item> [from <container>] - Pick up an item.", "info_block_content")
+                    player.add_message("drop <item> - Drop an item.", "info_block_content")
+                    player.add_message("inventory (i) - View your items.", "info_block_content")
+                    player.add_message("attack <target> - Engage a target in combat.", "info_block_content")
+                    player.add_message("equip/wear <item> [slot] - Equip an item.", "info_block_content")
+                    player.add_message("unequip/remove <item/slot> - Unequip an item.", "info_block_content")
+                    player.add_message("search <target> - Search a corpse or object.", "info_block_content")
+                    player.add_message("read <item in inventory> - Read a scroll or book.", "info_block_content")
+                    player.add_message("say <message> - Speak to others in the room.", "info_block_content")
+                    player.add_message("stats/score - View your character's statistics.", "info_block_content")
+                    player.add_message("health/hp - Check your current and maximum health.", "info_block_content")
+                    player.add_message("mana/mp - Check your current and maximum mana.", "info_block_content")
+                    player.add_message("experience/xp - View your experience and level progress.", "info_block_content")
+                    player.add_message("factions - View your faction standings.", "info_block_content")
+                    player.add_message("exits - List obvious exits from the current room.", "info_block_content")
+                    player.add_message("quit - Exit the game (saves character).", "info_block_content")
+                    player.add_message("You can also type directions (north, south, up, etc.) to move.", "info_block_content")
+                    player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
 
-
-                elif verb == "experience" or verb == "xp":
-                    action_taken = True; player.next_action_time = time.time() + 0.1
-                    # ... (your experience display logic) ...
+                elif verb == "experience" or verb == "xp" or verb == "exp": # Added exp
+                    action_taken = True
+                    xp_needed_for_next_level_val = config.XP_LEVEL_THRESHOLDS.get(player.level + 1, "Max Level Reached")
+                    player.add_message(f"--- Experience ---", "header_info_block")
+                    player.add_message(f"Level: {player.level}", "info_block_content")
+                    player.add_message(f"Current XP: {player.xp}", "info_block_content")
+                    player.add_message(f"XP to Next Level: {xp_needed_for_next_level_val}", "info_block_content")
+                    if hasattr(player, 'unabsorbed_xp'):
+                        player.add_message(f"Unabsorbed XP Pool: {player.unabsorbed_xp}", "info_block_content")
+                    if hasattr(player, 'get_current_mind_status'):
+                         player.add_message(f"Mind State: {player.get_current_mind_status(GAME_RACES)}", "info_block_content")
+                    player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
                 
                 elif verb == "health" or verb == "hp":
-                    action_taken = True; player.next_action_time = time.time() + 0.1
+                    action_taken = True
                     player.add_message(f"Health: {player.hp}/{player.max_hp}", "feedback_highlight")
+                    player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
 
                 elif verb == "mana" or verb == "mp":
-                    action_taken = True; player.next_action_time = time.time() + 0.1
+                    action_taken = True
                     player.add_message(f"Mana: {player.mp}/{player.max_mp}", "feedback_highlight")
+                    player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
                 
-                elif verb == "stats" or verb == "score" or verb == "character" or verb == "info": # Aliases added
-                    action_taken = True; player.next_action_time = time.time() + 0.1
+                elif verb == "stats" or verb == "score" or verb == "info": # Added info
+                    action_taken = True
                     send_player_stats_update(player) 
                     player.add_message("--- Your Stats ---", "header_info_block")
-                    # ... (your stats display logic) ...
+                    if hasattr(player, 'stats') and isinstance(player.stats, dict):
+                        for stat_key in config.ALL_STATS_ORDERED: 
+                            stat_val = player.stats.get(stat_key, 0) 
+                            stat_name_display = config.STAT_DESCRIPTIONS.get(stat_key, {}).get("name", stat_key.title())
+                            player.add_message(f"{stat_name_display}: {stat_val}", "info_block_content")
+                        if hasattr(player, 'training_points'):
+                             player.add_message(f"Training Points: {player.training_points}", "info_block_content")
+                    else:
+                        player.add_message("Could not retrieve your stats information.", "error")
+                    player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
                 
                 elif verb == "factions" or verb == "faction": 
-                    action_taken = True; player.next_action_time = time.time() + 0.1
-                    # ... (your faction display logic) ...
+                    action_taken = True
+                    if hasattr(player, 'get_faction_display_str'):
+                        faction_info = player.get_faction_display_str(getattr(config, 'FACTION_DISPLAY_NAMES', {}))
+                        player.add_message(faction_info, "system_info_block")
+                    else:
+                        player.add_message("You have no faction information to display.", "system_info")
+                    player.next_action_time = time.time() + getattr(config, 'ROUNDTIME_DEFAULTS', {}).get('roundtime_look', 0.2)
 
                 elif verb == "exits":
-                    action_taken = True; player.next_action_time = time.time() + 0.1
-                    # ... (your exits display logic) ...
+                    action_taken = True
+                    if current_room_data and current_room_data.get("exits"):
+                        exits_str_parts = []
+                        for exit_dir, exit_room_id in current_room_data.get("exits", {}).items():
+                            destination_room_name = GAME_ROOMS.get(exit_room_id, {}).get('name', 'an unknown place')
+                            exits_str_parts.append(f"{exit_dir.upper()} -> {destination_room_name}")
+                        player.add_message(f"Obvious Exits: {', '.join(exits_str_parts) or 'None apparent'}", "feedback_highlight")
+                    else:
+                        player.add_message("There are no obvious exits from here.", "feedback_neutral")
+                    player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
 
-                # --- MOVEMENT HANDLING (MUST BE LATE in the chain) ---
+                # --- MOVEMENT HANDLING (MUST BE AFTER specific commands) ---
                 elif current_room_data and verb in current_room_data.get("exits", {}): 
                     action_taken = True
-                    # ... (your movement logic, ensure RT is set) ...
+                    destination_room_id = current_room_data["exits"][verb]
+                    player.add_message(f"You move {verb}.", "feedback_move")
+                    broadcast_to_room(room_id_before_move, f"{player.name} leaves heading {verb}.", "ambient_player_departure", [sid])
+                    player.current_room_id = destination_room_id
+                    
+                    new_room_data_check = GAME_ROOMS.get(destination_room_id) 
+                    if new_room_data_check:
+                        broadcast_to_room(destination_room_id, f"{player.name} arrives from {get_opposite_direction(verb)}.", "ambient_player_arrival", [sid])
+                        send_room_description(player)
+                    else: 
+                        player.add_message("You try to move, but the way is blocked or leads nowhere. You remain where you are.", "error_move")
+                        player.current_room_id = room_id_before_move 
+                        send_room_description(player) 
+
                     player.next_action_time = time.time() + config.ROUNDTIME_DEFAULTS.get('roundtime_move', 0.5)
-                
+
+                # --- Fallback for unhandled commands ---
                 if not action_taken:
-                    player.add_message(f"You can't seem to '{command_input}' here. (Type 'help' for commands)", "error")
+                    # Check for item-specific verbs if not a general command
+                    item_for_verb_id = None
+                    item_for_verb_data = None
+                    if target_arg: # If there's a target, assume it's an item name for now
+                        for item_id_inv_verb in player.inventory:
+                            item_template_verb = GAME_ITEMS.get(item_id_inv_verb)
+                            if item_template_verb and (item_template_verb.get("name","").lower() == target_arg.lower() or item_id_inv_verb.lower() == target_arg.lower()):
+                                item_for_verb_id = item_id_inv_verb
+                                item_for_verb_data = item_template_verb
+                                break
+                    
+                    unhandled_message = f"You can't seem to '{command_input}' here. (Type 'help' for commands)"
+                    if item_for_verb_data: # Item was found in inventory, but verb isn't standard
+                         unhandled_message = f"You aren't sure how to '{verb}' the {item_for_verb_data.get('name', target_arg)}."
+                    elif target_arg and not item_for_verb_id : # Target was given, but item not in inventory
+                        # Check if it's an object in the room the player might be trying to interact with
+                        obj_id_verb, obj_data_verb = find_object_in_room(player, target_arg, current_room_data)
+                        if obj_data_verb:
+                             unhandled_message = f"You aren't sure how to '{verb}' the {obj_data_verb.get('name',target_arg)}."
+                        else: # Target given, not in inventory, not in room
+                             unhandled_message = f"You don't see a '{target_arg}' to '{verb}' with/on."
+
+                    player.add_message(unhandled_message, "error")
                     player.next_action_time = time.time() + 0.1 
             
             all_msgs = player.get_queued_messages()
@@ -904,11 +1173,10 @@ def handle_player_command(data):
             send_player_stats_update(player) 
 
         elif session: 
-            # ... (Character Creation Logic - THIS PART SHOULD BE FINE AND DOESN'T USE 'verb' for player commands)
             player_shell = session.get("player_shell")
             current_phase = session.get("phase")
 
-            def send_creation_messages(s_id, sess, p_shell): # Ensure this helper is defined or accessible
+            def send_creation_messages(s_id, sess, p_shell):
                 messages_to_client = []
                 if "messages_queue" in sess and sess["messages_queue"]:
                     messages_to_client.extend(sess["messages_queue"])
@@ -928,9 +1196,9 @@ def handle_player_command(data):
                     is_valid_name_format = all(c.isalpha() or c.isspace() for c in name_arg_initial) and any(c.isalpha() for c in name_arg_initial)
 
                     if player_handler and player_handler.player_exists(name_arg_initial):
-                        session["messages_queue"].append({"text": f"The name '{name_arg_initial}' is already whispered. Choose another.", "type": "error", "prompt":True})
+                        session["messages_queue"].append({"text": f"The name '{name_arg_initial}' is already whispered in the annals of this world. Choose another.", "type": "error", "prompt":True})
                     elif not (min_len <= len(name_arg_initial) <= max_len and is_valid_name_format):
-                        session["messages_queue"].append({"text": f"A name must be {min_len}-{max_len} letters/spaces.", "type": "error", "prompt":True})
+                        session["messages_queue"].append({"text": f"A name must be between {min_len} and {max_len} characters, containing only letters and spaces (and at least one letter).", "type": "error", "prompt":True})
                     else:
                         player_shell = player_class.Player(sid, name_arg_initial)
                         session["player_shell"] = player_shell
@@ -975,23 +1243,22 @@ def handle_player_command(data):
                 send_creation_messages(sid, session, player_shell) 
 
             elif not player_shell and current_phase != "awaiting_login_name": 
-                 session["messages_queue"].append({"text": "Connection unstable. Reconnecting may help.", "type": "error_critical", "prompt":True})
+                 session["messages_queue"].append({"text": "Your connection to the ethereal plane wavers. Reconnecting might stabilize your presence.", "type": "error_critical", "prompt":True})
                  send_creation_messages(sid, session, None)
-        
         else: 
-            if config.DEBUG_MODE: print(f"DEBUG ERROR: SID {sid} has no active player or creation session.")
-            emit('game_messages', {'messages': [{"text": "Reality flickers. Try reconnecting.", "type": "error_critical"}]}, room=sid)
+            if config.DEBUG_MODE: print(f"DEBUG ERROR: SID {sid} has no active player or creation session. This is unexpected.")
+            emit('game_messages', {'messages': [{"text": "A strange rift in reality prevents your actions. Please try reconnecting.", "type": "error_critical"}]}, room=sid)
 
     except Exception as e:
         print(f"!!! UNHANDLED EXCEPTION IN handle_player_command for SID {sid}, Command: '{command_input}' !!!")
         traceback.print_exc()
         try: 
-            socketio.emit('game_messages', {'messages': [{"text": "Critical server error. Command may not have processed.", "type": "error_critical"}]}, room=sid)
+            socketio.emit('game_messages', {'messages': [{"text": "A critical server error occurred. Your command may not have been processed. Please notify an administrator if this persists.", "type": "error_critical"}]}, room=sid)
         except Exception as e_emit:
             print(f"CRITICAL: Error emitting critical error message to client {sid}: {e_emit}")
 
-# ... (rest of your main.py: @app.route('/'), if __name__ == '__main__': etc. remains unchanged) ...
 
+            
 @app.route('/')
 def index_page():
     return render_template('index.html')

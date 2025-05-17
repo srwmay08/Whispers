@@ -1,3 +1,4 @@
+# game_data/default_rooms.py
 # mud_project/game_data/default_rooms.py
 
 # --- ROOMS ---
@@ -42,14 +43,14 @@ DEFAULT_ROOMS = {
                 "description": "A mossy stone well with a frayed rope disappearing into shadow. It looks like you could possibly CLIMB ROPE DOWN. The water within is said to be fresh and cold.",
                 "interactable": True,
                 "actions": {"climb rope down": 9},
-                "keywords": ["well", "rope", "stone well", "water"]
+                "keywords": ["well", "rope", "stone well", "water", "old well"]
             },
             "notice_board": {
                 "name": "Town Notice Board",
                 "description": "A weathered wooden board covered in various parchments: town announcements, merchant advertisements, and a few crudely drawn 'wanted' posters.",
                 "interactable": True,
                 "actions": {"read notices": "display_active_quests_regional"},
-                "keywords": ["notice", "board", "poster", "parchment"]
+                "keywords": ["notice", "board", "poster", "parchment", "notice board", "town notice board"] # MODIFIED
             }
         },
         #--- HIDDEN ENEMIES, ITEMS & OBJECTS ---
@@ -70,10 +71,10 @@ DEFAULT_ROOMS = {
         "tags": ["town", "gate", "defense", "oakhaven"],
         "searching": True,
         "hiding": True,
-        "pvp": True,
+        "pvp": False,
         "shouting": True,
-        "is_outdoor": True, # Defaulted from Room 1
-        "is_underground": False, # Defaulted from Room 1
+        "is_outdoor": True, 
+        "is_underground": False, 
         "xp_modifier": 1.0,
         "is_node": False,
         "xp_absorbtion_modifier": 1.0,
@@ -95,7 +96,7 @@ DEFAULT_ROOMS = {
                 "description": "A large, heavy-duty portcullis that serves as protection over the main gates. It looks well-maintained. The gate is currently closed and the guard here is standing watch over it.",
                 "interactable": False,
                 "actions": {},
-                "keywords": ["gate", "door"]
+                "keywords": ["gate", "door", "north gate"]
             },
             "gate_mechanism": {
                 "name": "Gate Winch",
@@ -124,8 +125,8 @@ DEFAULT_ROOMS = {
         "hiding": True,
         "pvp": False,
         "shouting": True,
-        "is_outdoor": True, # Defaulted from Room 1
-        "is_underground": False, # Defaulted from Room 1
+        "is_outdoor": True, 
+        "is_underground": False, 
         "xp_modifier": 1.0,
         "is_node": False,
         "xp_absorbtion_modifier": 1.0,
@@ -144,7 +145,15 @@ DEFAULT_ROOMS = {
         "items": [],
         "npcs": ["nervous_guard"],
         "monsters": [],
-        "objects": {},
+        "objects": {
+            "gate": { # Added basic gate object for South Gate
+                "name": "South Gate",
+                "description": "A sturdy wooden gate, currently closed. The guard here eyes it nervously.",
+                "interactable": False,
+                "actions": {},
+                "keywords": ["gate", "door", "south gate"]
+            }
+        },
         "passive_perception_required": False,
         "active_perception_required": False,
         "hidden_items": [],
@@ -164,8 +173,8 @@ DEFAULT_ROOMS = {
         "hiding": True,
         "pvp": False,
         "shouting": True,
-        "is_outdoor": True, # Defaulted from Room 1
-        "is_underground": False, # Defaulted from Room 1
+        "is_outdoor": True, 
+        "is_underground": False, 
         "xp_modifier": 1.0,
         "is_node": False,
         "xp_absorbtion_modifier": 1.0,
@@ -177,9 +186,11 @@ DEFAULT_ROOMS = {
         "touch_textures": ["cobblestones", "wooden walls of shops"],
         "exits": {
             "west": 1,
-            "up": 14,
+            "up": 14, # Assuming this leads to an upper floor or different area
             "alley_north": 22,
-            "alley_south": 23
+            "alley_south": 23,
+            "enter armory": 11, # Direct entry to shops
+            "enter bank": 12
         },
         "items": [],
         "npcs": ["wandering_peddler_arya"],
@@ -187,17 +198,17 @@ DEFAULT_ROOMS = {
         "objects": {
             "armory_sign": {
                 "name": "Armory Sign",
-                "description": "A wooden sign depicting a crossed hammer and sword. It's clearly the mark of a blacksmith or armorer.",
-                "interactable": False,
-                "actions": {},
-                "keywords": ["sign", "armory", "hammer", "sword"]
+                "description": "A wooden sign depicting a crossed hammer and sword. It's clearly the mark of a blacksmith or armorer. You could probably 'enter armory'.",
+                "interactable": True,
+                "actions": {"enter armory": 11},
+                "keywords": ["sign", "armory", "hammer", "sword", "armory sign"]
             },
             "bank_sign": {
                 "name": "Bank Sign",
-                "description": "A sturdy sign showing a pair of balanced scales, symbolizing the Town Bank.",
-                "interactable": False,
-                "actions": {},
-                "keywords": ["sign", "bank", "scales"]
+                "description": "A sturdy sign showing a pair of balanced scales, symbolizing the Town Bank. You could likely 'enter bank'.",
+                "interactable": True,
+                "actions": {"enter bank": 12},
+                "keywords": ["sign", "bank", "scales", "bank sign"]
             }
         },
         "passive_perception_required": False,
@@ -219,8 +230,8 @@ DEFAULT_ROOMS = {
         "hiding": True,
         "pvp": False,
         "shouting": True,
-        "is_outdoor": True, # Defaulted from Room 1
-        "is_underground": False, # Defaulted from Room 1
+        "is_outdoor": True, 
+        "is_underground": False, 
         "xp_modifier": 1.0,
         "is_node": False,
         "xp_absorbtion_modifier": 1.0,
@@ -232,18 +243,19 @@ DEFAULT_ROOMS = {
         "touch_textures": ["smooth flagstones", "cold stone of buildings"],
         "exits": {
             "east": 1,
-            "up": 15
+            "up": 15, # Assuming this leads somewhere like a balcony or upper walkway
+            "enter moot hall": 13 # Direct entry
         },
         "items": [],
-        "npcs": ["elderly_scholar_finneas"],
+        "npcs": ["elderly_scholar_finneas"], # Add NPC if defined, e.g., a clerk or official
         "monsters": [],
         "objects": {
              "moot_hall_doors": {
                 "name": "Moot Hall Doors",
-                "description": "Large, imposing doors made of dark, carved oak. They are currently closed.",
+                "description": "Large, imposing doors made of dark, carved oak. They are currently closed, but you could try to 'enter moot hall'.",
                 "interactable": True,
                 "actions": {"enter moot hall": 13},
-                "keywords": ["door", "doors", "moot hall entrance"]
+                "keywords": ["door", "doors", "moot hall entrance", "moot hall doors"]
             }
         },
         "passive_perception_required": False,
@@ -259,388 +271,249 @@ DEFAULT_ROOMS = {
         "on_exit_script": None,
         "trap_script": None
     },
+    # ... other rooms ...
+    # Room 9 (Well Bottom)
     9: { "id": 9, "name": "Well Bottom - Cistern Antechamber", "occupancy": 30,
         "tags": ["underground", "cistern", "dark", "dungeon_entrance"],
-        "searching": True, # Was missing, added with Room 1's value
-        "hiding": True, # Was missing, added with Room 1's value
-        "pvp": False, # Was missing, added with Room 1's value
-        "shouting": True, # Was missing, added with Room 1's value
-        "is_outdoor": False,
-        "is_underground": True,
-        "xp_modifier": 2.5,
-        "is_node": True,
-        "xp_absorbtion_modifier": 1.0,
+        "searching": True, "hiding": True, "pvp": False, "shouting": True,
+        "is_outdoor": False, "is_underground": True,
+        "xp_modifier": 2.5, "is_node": True, "xp_absorbtion_modifier": 1.0,
         "description": "You land with a jarring thud on the cold, damp stone floor, the impact stealing your breath for a moment. The air is heavy, cool, and smells strongly of stagnant water, wet earth, and something vaguely unpleasant, perhaps mildew or decay. Utter darkness presses in, broken only by the faint light filtering down from the well opening high above, illuminating the dangling rope you descended. Water drips incessantly from unseen cracks in the roughly carved ceiling, echoing eerily in the confined space. The walls are slick with moisture and grime. To the east, a low, arched opening promises passage deeper into whatever lies beneath Oakhaven, its threshold shrouded in deeper shadow. A profound sense of isolation and hidden secrets permeates this forgotten place beneath the town's busy streets.",
         "description_night": "The darkness at the bottom of the well is absolute, save for the faintest glimmer from the distant well opening, which might now show starlight instead of daylight. The oppressive atmosphere feels even more pronounced.",
         "description_storm": "The sound of the storm above is a muted roar, but the dripping of water intensifies as more rainwater seeps through the earth and stone. The air becomes even colder and damper.",
         "ambient_sounds": ["dripping water", "faint echo of town above", "scuttling (faint)"],
         "ambient_smells": ["stagnant water", "wet earth", "mildew", "decay"],
         "touch_textures": ["cold damp stone", "slick grime", "frayed rope"],
-        "exits": {
-            "east": 16,
-            "up": 1
-        },
-        "items": [],
-        "npcs": [],
-        "monsters": ["goblin_archer"],
+        "exits": { "east": 16, "up": 1 },
+        "items": [], "npcs": [], "monsters": ["goblin_archer"], # Ensure goblin_archer is defined
         "objects": {
             "rope": {
                 "name": "Dangling Rope",
-                "description": "The frayed rope you used to descend. It looks strong enough for another climb, but you wouldn't want to test it too many times.",
-                "interactable": True,
-                "actions": {"climb rope up": 1},
-                "keywords": ["rope", "climb"]
+                "description": "The frayed rope you used to descend. It looks strong enough for another climb, but you wouldn't want to test it too many times. You could CLIMB ROPE UP.",
+                "interactable": True, "actions": {"climb rope up": 1},
+                "keywords": ["rope", "climb", "dangling rope"]
             },
             "debris_pile": {
                 "name": "Pile of Debris",
                 "description": "A small pile of rocks, mud, and what looks like rotted wood in a corner. It seems to have fallen from above or washed in.",
-                "interactable": True,
-                "actions": {"search debris": "find_item_or_nothing_debris_well_bottom"},
-                "keywords": ["debris", "pile", "rocks", "mud"]
+                "interactable": True, "actions": {"search debris": "find_item_or_nothing_debris_well_bottom"},
+                "keywords": ["debris", "pile", "rocks", "mud", "debris pile"]
             }
         },
-        "passive_perception_required": True,
-        "active_perception_required": True,
+        "passive_perception_required": True, "active_perception_required": True,
         "hidden_items": [{"item_id": "cracked_pottery_shard", "dc": 12, "description_found": "Among the debris, you find a shard of old, cracked pottery."}],
-        "hidden_npcs": [],
-        "hidden_monsters": [],
-        "hidden_objects": [],
         "monster_spawns": [
-            {"template_key": "goblin_archer",
-             "max_active": 1,
-             "respawn_time_seconds": 100,
-             "simulated_spawn_chance": 1,
-             "_killed_at": []}
+            {"template_key": "goblin_archer", "max_active": 1, "respawn_time_seconds": 100, "simulated_spawn_chance": 1.0, "_killed_at": [] }
         ],
-        "visited": False,
-        "on_enter_script": "check_fall_damage_script",
-        "on_linger_script": None, # Was missing, added with Room 1's value (None)
-        "on_exit_script": None,
-        "trap_script": None
+        "visited": False, "on_enter_script": "check_fall_damage_script", "on_linger_script": None, "on_exit_script": None, "trap_script": None
     },
+    # Room 11 (Armory)
     11: { "id": 11, "name": "Oakhaven Armory", "occupancy": 4,
         "tags": ["town", "shop", "blacksmith", "armory", "oakhaven"],
-        "searching": True, # Was missing, added with Room 1's value
-        "hiding": True, # Was missing, added with Room 1's value
-        "pvp": False, # Was missing, added with Room 1's value
-        "shouting": True, # Was missing, added with Room 1's value
-        "is_outdoor": False, # Kept existing, if it were there; otherwise default True from Room 1. Assuming it was False (indoor). Let's assume it wasn't specified, so default from Room 1 is_outdoor: True. Correcting this to False as it's an indoor location.
-        "is_underground": False, # Defaulted from Room 1
-        "xp_modifier": 1.0,
-        "is_node": False,
-        "xp_absorbtion_modifier": 1.0,
+        "searching": True, "hiding": True, "pvp": False, "shouting": True,
+        "is_outdoor": False, "is_underground": False,
+        "xp_modifier": 1.0, "is_node": False, "xp_absorbtion_modifier": 1.0,
         "description": "Pushing open the heavy wooden door, you step into the Oakhaven Armory. The air inside is thick with the metallic tang of cooling steel, the acrid bite of coal smoke from the perpetually glowing forge, and the faint scent of sweat and oil. Racks of serviceable swords, axes, and spears line the stone walls, interspersed with pieces of leather and chainmail armour awaiting repair or purchase. The rhythmic clang of a hammer striking an anvil dominates the soundscape, punctuated by the hissing sizzle of hot metal quenched in water. In the corner, a stout, muscular figure – Grom the Blacksmith – hammers relentlessly on a piece of glowing iron, his brow furrowed in concentration. Near the back, a battered training dummy, stuffed with straw and covered in countless dents and cuts, stands ready for practice blows. It's a place of practical craft and martial necessity, humming with latent energy.",
         "description_night": "At night, the Armory is quieter. The forge might be banked, glowing softly, or Grom might still be working by lamplight, the clang of his hammer more pronounced in the stillness. Shadows deepen in the corners, making the racks of weapons look more menacing.",
         "description_storm": "During a storm, the sound of rain on the Armory roof is a dull roar, and the wind might whistle through cracks. The forge's heat is a welcome contrast to the cold outside. The clang of the hammer fights against the storm's noise.",
         "ambient_sounds": ["hammer on anvil", "hiss of quenched metal", "bellows whooshing", "grunts of effort from Grom"],
         "ambient_smells": ["burning coal", "hot metal", "quenching oil", "sweat"],
         "touch_textures": ["warm air", "rough stone walls", "smooth metal of tools"],
-        "exits": {
-            "out": 4
-        },
-        "items": [],
-        "npcs": ["grom blacksmith"],
-        "monsters": ["training dummy"],
+        "exits": { "out": 4 },
+        "items": [], "npcs": ["grom_blacksmith"], "monsters": ["training_dummy"], # Make sure these keys match definitions
         "objects": {
             "forge": {
                 "name": "Blacksmith's Forge",
                 "description": "A large stone forge, currently radiating intense heat. Coals glow brightly within, and bellows stand ready to intensify the flames.",
-                "interactable": True,
-                "actions": {"use_forge": "player_smithing_interface"},
-                "keywords": ["forge", "fire", "coals"]
+                "interactable": True, "actions": {"use_forge": "player_smithing_interface"},
+                "keywords": ["forge", "fire", "coals", "blacksmiths forge", "blacksmith forge"]
             },
             "anvil": {
                 "name": "Anvil",
                 "description": "A heavy steel anvil, its surface scarred and worn from countless hammer blows. It rings sharply when struck.",
-                "interactable": False,
-                "actions": {},
+                "interactable": False, "actions": {},
                 "keywords": ["anvil", "steel block"]
             },
             "weapon_racks": {
                 "name": "Weapon Racks",
                 "description": "Several sturdy wooden racks displaying various weapons: swords, axes, maces, and spears. Most look functional, if not finely crafted.",
-                "interactable": True,
-                "actions": {"browse_weapons": "show_grom_weapon_inventory"},
-                "keywords": ["weapons", "racks", "swords", "axes"]
+                "interactable": True, "actions": {"browse_weapons": "show_grom_weapon_inventory"},
+                "keywords": ["weapons", "racks", "swords", "axes", "weapon racks"]
             }
         },
-        "passive_perception_required": False,
-        "active_perception_required": False,
+        "passive_perception_required": False, "active_perception_required": False,
         "hidden_items": [{"item_id": "chipped_whetstone", "dc": 13, "description_found":"Tucked under a bench, you find a chipped whetstone."}],
-        "hidden_npcs": [],
-        "hidden_monsters": [],
-        "hidden_objects": [],
         "monster_spawns": [
-            {"template_key": "training dummy", "max_active": 1, "respawn_time_seconds": 60, "_killed_at": []}
+            {"template_key": "training_dummy", "max_active": 1, "respawn_time_seconds": 60, "_killed_at": [] }
         ],
-        "visited": False,
-        "on_enter_script": None,
-        "on_linger_script": None, # Was missing, added with Room 1's value (None)
-        "on_exit_script": None,
-        "trap_script": None
+        "visited": False, "on_enter_script": None, "on_linger_script": None, "on_exit_script": None, "trap_script": None
     },
+    # Room 12 (Bank)
     12: { "id": 12, "name": "Oakhaven Bank", "occupancy": 3,
         "tags": ["town", "shop", "bank", "finance", "oakhaven"],
-        "searching": True, # Was missing, added with Room 1's value
-        "hiding": True, # Was missing, added with Room 1's value
-        "pvp": False, # Was missing, added with Room 1's value
-        "shouting": True, # Was missing, added with Room 1's value
-        "is_outdoor": False, # Corrected: Bank is indoor. Original logic would default to True.
-        "is_underground": False, # Defaulted from Room 1
-        "xp_modifier": 1.0,
-        "is_node": False,
-        "xp_absorbtion_modifier": 1.0,
+        "searching": True, "hiding": True, "pvp": False, "shouting": True,
+        "is_outdoor": False, "is_underground": False,
+        "xp_modifier": 1.0, "is_node": False, "xp_absorbtion_modifier": 1.0,
         "description": "The Oakhaven Bank is a small but solidly built stone structure, projecting an image of security and stability amidst the more rustic timber buildings nearby. Inside, the air is cool and still, carrying the faint, dry scent of old parchment, ink, and the metallic tang of currency. A heavy oak counter, polished smooth by years of transactions, separates the public space from the banker's area. Small, barred windows let in minimal light, adding to the secure, slightly somber atmosphere. Behind the counter, Master Elmsworth, a man of precise habits and clad in respectable, if slightly ink-stained, clothes, likely presides over ledgers and coin sacks. A heavy, iron-reinforced door, presumably leading to a vault or strongroom, is visible in the back wall, underscoring the building's purpose.",
         "description_night": "At night, the Oakhaven Bank is securely locked. No light escapes from within. It stands as a silent, solid presence on Market Street. The only sound might be the faint rustle of a guard patrol passing by.",
         "description_storm": "The Bank's stone walls easily repel the storm. Inside, it would be a quiet refuge from the noise, though the barred windows would show the lashing rain. Master Elmsworth is likely ensuring all is secure.",
         "ambient_sounds": ["scratch of quill on parchment", "clink of coins (occasional)", " hushed tones"],
         "ambient_smells": ["old parchment", "ink", "coins", "polished wood"],
         "touch_textures": ["smooth polished wood", "cold metal bars", "cool air"],
-        "exits": {
-            "out": 4
-        },
-        "items": [],
-        "npcs": ["master_elmsworth"],
-        "monsters": [],
+        "exits": { "out": 4 },
+        "items": [], "npcs": ["master_elmsworth"], "monsters": [],
         "objects": {
             "tellers_counter": {
                 "name": "Teller's Counter",
                 "description": "A sturdy oak counter, worn smooth with age. A small grille allows for transactions while maintaining security.",
-                "interactable": True,
-                "actions": {"speak_to_banker": "initiate_dialogue_elmsworth"},
-                "keywords": ["counter", "desk", "teller"]
+                "interactable": True, "actions": {"speak_to_banker": "initiate_dialogue_elmsworth"},
+                "keywords": ["counter", "desk", "teller", "tellers counter"]
             },
             "vault_door": {
                 "name": "Vault Door",
                 "description": "A very thick, iron-reinforced door set into the back wall. It has multiple complex locks and looks incredibly secure.",
-                "interactable": False,
-                "actions": {},
-                "keywords": ["vault", "door", "safe", "strongroom"]
+                "interactable": False, "actions": {},
+                "keywords": ["vault", "door", "safe", "strongroom", "vault door"]
             }
         },
-        "passive_perception_required": False,
-        "active_perception_required": False,
-        "hidden_items": [],
-        "hidden_npcs": [],
-        "hidden_monsters": [],
-        "hidden_objects": [],
-        "monster_spawns": [],
-        "visited": False,
-        "on_enter_script": None,
-        "on_linger_script": None, # Was missing, added with Room 1's value (None)
-        "on_exit_script": None,
-        "trap_script": None
+        "passive_perception_required": False, "active_perception_required": False,
+        "hidden_items": [], "monster_spawns": [],
+        "visited": False, "on_enter_script": None, "on_linger_script": None, "on_exit_script": None, "trap_script": None
     },
+    # Room 13 (Moot Hall)
     13: { "id": 13, "name": "Oakhaven Moot Hall", "occupancy": 7,
         "tags": ["town", "civic", "government", "moot hall", "oakhaven"],
-        "searching": True, # Was missing, added with Room 1's value
-        "hiding": True, # Was missing, added with Room 1's value
-        "pvp": False, # Was missing, added with Room 1's value
-        "shouting": True, # Was missing, added with Room 1's value
-        "is_outdoor": False, # Corrected: Moot Hall is indoor.
-        "is_underground": False, # Defaulted from Room 1
-        "xp_modifier": 1.0,
-        "is_node": False,
-        "xp_absorbtion_modifier": 1.0,
+        "searching": True, "hiding": True, "pvp": False, "shouting": True,
+        "is_outdoor": False, "is_underground": False,
+        "xp_modifier": 1.0, "is_node": False, "xp_absorbtion_modifier": 1.0,
         "description": "The Moot Hall is a spacious, high-ceilinged chamber that serves as the center of Oakhaven's governance and important community gatherings. Massive, dark oak beams support the roof overhead, and the air smells faintly of polished wood, old beeswax, and dust motes dancing in the light filtering through tall, arched windows. A long, heavy table dominates the center of the room, surrounded by sturdy wooden chairs, where the town elders likely convene. The stone walls might be adorned with faded tapestries depicting scenes from Oakhaven's history or perhaps shields bearing the crests of founding families. The atmosphere is one of quiet dignity and deliberation, presided over by the venerable Elder Rowan, whose wisdom guides the town.",
         "description_night": "By night, the Moot Hall is often dark and silent, unless a council meeting runs late, in which case muted light might spill from its tall windows. The grand table is a shadowy expanse in the moonlight filtering through.",
         "description_storm": "The sounds of the storm are muffled within the thick walls of the Moot Hall. Rain streaks down the arched windows. It feels like a secure, important place, sheltered from the elements.",
         "ambient_sounds": ["solemn quiet", "rustle of robes", "creak of old wood", "faint echoes"],
         "ambient_smells": ["polished wood", "old beeswax", "dust", "old parchment"],
         "touch_textures": ["smooth polished wood", "cool stone walls", "velvet cushions on chairs"],
-        "exits": {
-            "out": 5
-        },
-        "items": [],
-        "npcs": ["elder_rowan"],
-        "monsters": [],
+        "exits": { "out": 5 },
+        "items": [], "npcs": ["elder_rowan"], "monsters": [],
         "objects": {
             "council_table": {
                 "name": "Council Table",
                 "description": "A very long and heavy table made of dark, polished oak. Many important decisions for Oakhaven have likely been made here.",
-                "interactable": False,
-                "actions": {},
+                "interactable": False, "actions": {},
                 "keywords": ["table", "council table"]
             },
             "historical_tapestries": {
                 "name": "Historical Tapestries",
                 "description": "Several large, faded tapestries hang on the walls, depicting scenes of Oakhaven's founding, battles, and notable events. They are quite old.",
-                "interactable": True,
-                "actions": {"examine_tapestries": "learn_local_lore_oakhaven"},
-                "keywords": ["tapestry", "tapestries", "wall hangings"]
+                "interactable": True, "actions": {"examine_tapestries": "learn_local_lore_oakhaven"},
+                "keywords": ["tapestry", "tapestries", "wall hangings", "historical tapestries"]
             }
         },
-        "passive_perception_required": False,
-        "active_perception_required": False,
+        "passive_perception_required": False, "active_perception_required": False,
         "hidden_items": [{"item_id": "lost_page_town_charter", "dc": 16, "description_found":"Slipped behind a tapestry, you discover a missing page from what appears to be an official document."}],
-        "hidden_npcs": [],
-        "hidden_monsters": [],
-        "hidden_objects": [],
         "monster_spawns": [],
-        "visited": False,
-        "on_enter_script": "moot_hall_ambience_script",
-        "on_linger_script": None, # Was missing, added with Room 1's value (None)
-        "on_exit_script": None,
-        "trap_script": None
+        "visited": False, "on_enter_script": "moot_hall_ambience_script", "on_linger_script": None, "on_exit_script": None, "trap_script": None
     },
+    # Room 16 (Decaying Passage)
     16: { "id": 16, "name": "Decaying Passage", "occupancy": 2,
         "tags": ["underground", "sewer", "passage", "decaying", "dangerous"],
-        "searching": True, # Was missing, added with Room 1's value
-        "hiding": True, # Was missing, added with Room 1's value
-        "pvp": False, # Was missing, added with Room 1's value
-        "shouting": True, # Was missing, added with Room 1's value
-        "is_outdoor": False, # This room had no is_outdoor, but is_underground implies False
-        "is_underground": True, # This room would have had this key or it's implied by context
-        "xp_modifier": 1.0,
-        "is_node": False,
-        "xp_absorbtion_modifier": 1.0,
+        "searching": True, "hiding": True, "pvp": False, "shouting": True,
+        "is_outdoor": False, "is_underground": True,
+        "xp_modifier": 1.0, "is_node": False, "xp_absorbtion_modifier": 1.0,
         "description": "You wade through knee-deep, murky water that chills you to the bone and obscures the treacherous footing below. The passage walls are constructed of crumbling brick and stone, weeping moisture and coated in patches of slimy, green algae. The air is stagnant and foul, thick with the stench of decay and the unmistakable musk of vermin. Every splash of your movement echoes unnervingly down the narrow corridor, occasionally answered by faint scuttling sounds from the oppressive darkness ahead or behind. Loose stones and debris litter the submerged floor, making progress slow and cautious. This forgotten waterway clearly hasn't seen proper maintenance in decades, perhaps centuries, slowly surrendering to the damp and the creatures that thrive in it.",
         "description_night": "Night makes no difference in this already lightless passage. The oppressive darkness and foul smells remain constant.",
         "description_storm": "The storm above might cause the water level to rise slightly, making wading more difficult. The dripping from the ceiling could increase to a steady trickle.",
         "ambient_sounds": ["splashing water", "dripping", "scuttling sounds", "distant groans of shifting earth"],
         "ambient_smells": ["decay", "stagnant water", "vermin musk", "mold"],
         "touch_textures": ["murky cold water", "slimy walls", "loose stones underfoot"],
-        "exits": {
-            "west": 9,
-            "north": 17,
-            "south": 18
-        },
-        "items": [],
-        "npcs": [],
-        "monsters": ["giant_rat", "giant_rat"],
+        "exits": { "west": 9, "north": 17, "south": 18 },
+        "items": [], "npcs": [], "monsters": ["giant_rat", "giant_rat"],
         "objects": {
             "slimy_algae": {
                 "name": "Slimy Algae",
                 "description": "Patches of disgusting green and black algae cling to the walls, slick to the touch.",
-                "interactable": False,
-                "actions": {},
-                "keywords": ["algae", "slime", "moss"]
+                "interactable": False, "actions": {},
+                "keywords": ["algae", "slime", "moss", "slimy algae"]
             }
         },
-        "passive_perception_required": True,
-        "active_perception_required": True,
+        "passive_perception_required": True, "active_perception_required": True,
         "hidden_items": [{"item_id": "waterlogged_coin", "dc": 14, "description_found":"Your foot nudges something small and metallic in the murky water - an old, waterlogged coin."}],
-        "hidden_npcs": [],
         "hidden_monsters": [{"monster_id": "slimy_creeper", "dc": 15, "description_found": "A patch of algae suddenly detaches from the wall, revealing a lurking Slimy Creeper!"}],
-        "hidden_objects": [],
         "monster_spawns": [
             {"template_key": "giant_rat", "max_active": 3, "respawn_time_seconds": 120, "_killed_at": []},
             {"template_key": "sewer_leech_swarm", "max_active": 1, "respawn_time_seconds": 300, "_killed_at": []}
         ],
-        "visited": False,
-        "on_enter_script": None,
-        "on_linger_script": None, # Was missing, added with Room 1's value (None)
-        "on_exit_script": None,
-        "trap_script": None
+        "visited": False, "on_enter_script": None, "on_linger_script": None, "on_exit_script": None, "trap_script": None
     },
+    # Room 17 (Flooded Storeroom)
     17: { "id": 17, "name": "Flooded Storeroom", "occupancy": 2,
         "tags": ["underground", "cistern", "storeroom", "flooded", "dangerous"],
-        "searching": True, # Was missing, added with Room 1's value
-        "hiding": True, # Was missing, added with Room 1's value
-        "pvp": False, # Was missing, added with Room 1's value
-        "shouting": True, # Was missing, added with Room 1's value
-        "is_outdoor": False, # Implied by context
-        "is_underground": True, # Implied by context
-        "xp_modifier": 1.0,
-        "is_node": False,
-        "xp_absorbtion_modifier": 1.0,
+        "searching": True, "hiding": True, "pvp": False, "shouting": True,
+        "is_outdoor": False, "is_underground": True,
+        "xp_modifier": 1.0, "is_node": False, "xp_absorbtion_modifier": 1.0,
         "description": "This small chamber is mostly submerged in the same cold, murky water as the passage, reaching waist-height in the center. Rotting wooden crates and the warped staves of broken barrels bob listlessly on the surface or rest waterlogged on the bottom. The stone walls are slick with damp and decay, and the air hangs heavy and still, disturbed only by the constant drip... drip... drip from the low ceiling. Shelves carved into the walls are either empty or hold only rusted, unrecognizable shapes. Partially hidden on a higher shelf, just above the waterline and catching a faint glint of light, lies a small, tarnished metal object – perhaps a locket, strangely preserved amidst the ruin. The silence here feels heavy, a repository of forgotten goods and perhaps forgotten stories.",
         "description_night": "Darkness is total. The only change might be the temperature of the water feeling even colder.",
         "description_storm": "The dripping might become more pronounced, and the water level could rise, making it harder to reach the shelf.",
         "ambient_sounds": ["dripping water", "water lapping gently", "faint gurgling"],
         "ambient_smells": ["stagnant water", "rot", "rust", "mildew"],
         "touch_textures": ["cold water", "slimy stone", "rotting wood"],
-        "exits": {
-            "south": 16
-        },
-        "items": ["tarnished_locket"],
-        "npcs": [],
-        "monsters": ["kobold_warrior"],
+        "exits": { "south": 16 },
+        "items": ["tarnished_locket"], "npcs": [], "monsters": ["kobold_warrior"],
         "objects": {
             "rotting_crates": {
                 "name": "Rotting Crates",
                 "description": "Several wooden crates, mostly fallen apart and waterlogged. Their original contents are long gone or ruined.",
-                "interactable": True,
-                "actions": {"search_crates": "find_ruined_junk_or_nothing"},
-                "keywords": ["crates", "boxes", "wood"]
+                "interactable": True, "actions": {"search_crates": "find_ruined_junk_or_nothing"},
+                "keywords": ["crates", "boxes", "wood", "rotting crates"]
             },
             "high_shelf": {
                 "name": "High Shelf",
                 "description": "A stone shelf carved into the wall, just above the current waterline. Something small and metallic glints there.",
-                "interactable": True,
-                "actions": {"reach_for_locket": "attempt_get_tarnished_locket"},
-                "keywords": ["shelf", "ledge"]
+                "interactable": True, "actions": {"reach_for_locket": "attempt_get_tarnished_locket"},
+                "keywords": ["shelf", "ledge", "high shelf"]
             }
         },
-        "passive_perception_required": True,
-        "active_perception_required": True,
+        "passive_perception_required": True, "active_perception_required": True,
         "hidden_items": [{"item_id": "waterproof_pouch_rotted", "dc": 15, "description_found":"Wedged behind a loose stone in a shelf, you find a rotted waterproof pouch. It contains nothing of value."}],
-        "hidden_npcs": [],
-        "hidden_monsters": [],
-        "hidden_objects": [],
         "monster_spawns": [
             {"template_key": "kobold_warrior", "max_active": 1, "respawn_time_seconds": 240, "_killed_at": []},
             {"template_key": "kobold_skirmisher_lesser", "max_active": 2, "respawn_time_seconds": 180, "_killed_at": []}
         ],
-        "visited": False,
-        "on_enter_script": None,
-        "on_linger_script": None, # Was missing, added with Room 1's value (None)
-        "on_exit_script": None,
-        "trap_script": None
+        "visited": False, "on_enter_script": None, "on_linger_script": None, "on_exit_script": None, "trap_script": None
     },
+    # Room 18 (Trapped Corridor)
     18: { "id": 18, "name": "Trapped Corridor", "occupancy": 1,
         "tags": ["underground", "corridor", "trapped", "narrow", "dangerous"],
-        "searching": True, # Was missing, added with Room 1's value
-        "hiding": True, # Was missing, added with Room 1's value
-        "pvp": False, # Was missing, added with Room 1's value
-        "shouting": True, # Was missing, added with Room 1's value
-        "is_outdoor": False, # Implied by context
-        "is_underground": True, # Implied by context
-        "xp_modifier": 1.0,
-        "is_node": False,
-        "xp_absorbtion_modifier": 1.0,
+        "searching": True, "hiding": True, "pvp": False, "shouting": True,
+        "is_outdoor": False, "is_underground": True,
+        "xp_modifier": 1.0, "is_node": False, "xp_absorbtion_modifier": 1.0,
         "description": "The passage narrows here, forcing you to turn sideways to squeeze through. The walls press close, rough-hewn and claustrophobic, covered in dust and thick cobwebs that cling to you as you pass. The air is stale and undisturbed, suggesting few have trod this way recently. Underfoot, the ground is uneven, and a section of the floor ahead appears disturbed, composed of looser stones than the surrounding flagstones. It looks suspiciously unstable, hinting that a careless step might trigger an unwelcome surprise from the shadows. The tension is palpable; the confined space and the suspicious flooring create an atmosphere thick with potential danger, urging extreme caution.",
         "description_night": "No change from daytime in this lightless corridor.",
         "description_storm": "The storm is inaudible here, deep underground. The stale air remains.",
         "ambient_sounds": ["absolute quiet", "your own breathing", "faint rustle of cobwebs"],
         "ambient_smells": ["stale air", "dust", "faint metallic tang (trap mechanism?)"],
         "touch_textures": ["rough stone walls", "sticky cobwebs", "uneven floor"],
-        "exits": {
-            "north": 16,
-        },
-        "items": [],
-        "npcs": [],
-        "monsters": ["goblin_archer"],
+        "exits": { "north": 16 },
+        "items": [], "npcs": [], "monsters": ["goblin_archer"],
         "objects": {
             "loose_stones": {
                 "name": "Loose Stones",
                 "description": "A section of the floor paved with loose, unstable-looking stones. It's likely a pressure plate for a trap.",
-                "interactable": True,
-                "actions": {"disarm trap": "attempt_disarm_dart_trap_18", "step_carefully": "attempt_avoid_trap_18"},
+                "interactable": True, "actions": {"disarm trap": "attempt_disarm_dart_trap_18", "step_carefully": "attempt_avoid_trap_18"},
                 "keywords": ["stones", "loose stones", "floor", "plate", "trap"]
             },
             "cobwebs": {
                 "name": "Thick Cobwebs",
                 "description": "Thick, dusty cobwebs hang like curtains, obscuring vision slightly.",
-                "interactable": True,
-                "actions": {"clear_cobwebs": "action_clear_cobwebs"},
-                "keywords": ["cobwebs", "webs", "spiderwebs"]
+                "interactable": True, "actions": {"clear_cobwebs": "action_clear_cobwebs"},
+                "keywords": ["cobwebs", "webs", "spiderwebs", "thick cobwebs"]
             }
         },
-        "passive_perception_required": True,
-        "active_perception_required": True,
+        "passive_perception_required": True, "active_perception_required": True,
         "hidden_items": [{"item_id": "bent_dart", "dc": 10, "description_found":"Lodged in a crack near the floor, you find a bent dart, evidence of the trap."}],
-        "hidden_npcs": [],
-        "hidden_monsters": [],
-        "hidden_objects": [],
         "monster_spawns": [
             {"template_key": "goblin_archer", "max_active": 1, "respawn_time_seconds": 260, "_killed_at": []},
             {"template_key": "goblin_sneak_lesser", "max_active": 1, "respawn_time_seconds": 200, "_killed_at": []}
         ],
-        "visited": False,
-        "on_enter_script": "check_trigger_trap_18_script",
-        "on_linger_script": None, # Was missing, added with Room 1's value (None)
-        "on_exit_script": None,
-        "trap_script": "dart_trap_18_logic" # Original value preserved.
+        "visited": False, "on_enter_script": "check_trigger_trap_18_script", "on_linger_script": None, "on_exit_script": None, "trap_script": "dart_trap_18_logic"
     }
 }
