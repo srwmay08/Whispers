@@ -594,19 +594,26 @@ def handle_player_command(data):
                 parts = command_input.lower().split(" ", 1)
                 verb = parts[0]
                 raw_target_arg = parts[1].strip() if len(parts) > 1 else None
-                target_arg = None 
+                target_arg = None # Default to None
 
+                # Refined target_arg parsing
                 if raw_target_arg:
                     if verb == "say":
-                        target_arg = parts[1].strip() 
+                        target_arg = parts[1].strip()
                     else:
                         look_verbs = ["look", "l", "examine", "ex", "exa"]
-                        # Allow "look at <target>" by stripping "at "
-                        if verb in look_verbs and raw_target_arg.lower().startswith("at ") and len(raw_target_arg) > 3:
+                        action_verbs_with_target = [
+                            "search", "attack", "get", "take", "drop", "talk", "give",
+                            "open", "close", "enter", "use", "read", "cast", "climb",
+                            "skin", "equip", "unequip", "wear", "remove", "push", "pull" # Added push/pull
+                        ]
+                        if verb in look_verbs and raw_target_arg.startswith("at ") and len(raw_target_arg) > 3:
                             target_arg = raw_target_arg[3:].strip()
-                        else:
+                        elif verb in action_verbs_with_target or verb in look_verbs:
                             target_arg = raw_target_arg
-                
+                        elif raw_target_arg:
+                             target_arg = raw_target_arg
+
                 if config.DEBUG_MODE: print(f"DEBUG CMD PARSED: Verb='{verb}', TargetArg='{target_arg}' (RawTarget='{raw_target_arg}')")
                 
                 room_id_before_move = player.current_room_id
@@ -616,132 +623,164 @@ def handle_player_command(data):
                 if not current_room_data:
                     player.add_message(f"Error: You are in an unknown room (ID: {room_id_before_move})! Moving to safety...", "error_critical")
                     player.current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1)
-                    if player_handler: player_handler.save_player(player) 
+                    if player_handler: player_handler.save_player(player)
                     current_room_data = GAME_ROOMS.get(player.current_room_id)
-                    if not current_room_data: 
+                    if not current_room_data:
                         player.add_message("PANIC: Default room is also invalid. Please contact an administrator.", "error_critical")
                         all_msgs_panic = player.get_queued_messages()
                         if all_msgs_panic: socketio.emit('game_messages', {'messages': all_msgs_panic}, room=sid)
                         return 
-                    send_room_description(player) 
+                    send_room_description(player)
                 
-                # --- START OF COMMAND HANDLING CHAIN ---
                 if verb == "attack":
                     action_taken = True
                     rt_look = config.ROUNDTIME_DEFAULTS.get('roundtime_look', 0.2)
-                    rt_attack = config.ROUNDTIME_DEFAULTS.get('roundtime_attack', 3.0)
+                    rt_attack = config.ROUNDTIME_DEFAULTS.get('roundtime_attack', 3.0) # Ensure rt_attack is defined
+                    
                     if not target_arg:
                         player.add_message("Attack whom or what?", "error")
                         player.next_action_time = time.time() + rt_look
-                    elif not current_room_data: 
+                    elif not current_room_data:
                         player.add_message("You can't attack anything in the void.", "error")
                         player.next_action_time = time.time() + rt_look
                     else:
                         target_data, target_type, target_id_or_key, target_full_match_data = find_combat_target_in_room(player, target_arg, current_room_data)
+                        
                         if target_data:
                             if target_type == "player":
-                                target_player_object = target_data 
-                                if not current_room_data.get("pvp", False):
+                                target_player_object = target_data # target_data is the player object
+                                if not current_room_data.get("pvp", getattr(config, "PVP_ENABLED_ROOM_TAG", False)): # Using config for default
                                     player.add_message("You cannot engage in combat with other adventurers here.", "error_pvp")
                                     player.next_action_time = time.time() + rt_look
                                 elif target_player_object.sid == player.sid:
                                      player.add_message("Attacking yourself seems unproductive.", "feedback_neutral")
                                      player.next_action_time = time.time() + rt_look
-                                else: 
+                                else: # Actual PvP
                                     if config.DEBUG_MODE: print(f"DEBUG PVP: {player.name} initiating attack on {target_player_object.name}")
-                                    combat_results = {} 
+                                    combat_results = {}
                                     try:
                                         combat_results = combat.handle_pvp_attack(player, target_player_object, GAME_ITEMS)
-                                    except AttributeError:
+                                    except AttributeError as pvp_attr_e:
                                         player.add_message("PvP combat system is not yet fully implemented.", "error_dev")
-                                        if config.DEBUG_MODE: print("DEBUG PVP: combat.handle_pvp_attack is not yet implemented.")
+                                        if config.DEBUG_MODE: print(f"DEBUG PVP ATTRIBUTE_ERROR: {pvp_attr_e}"); traceback.print_exc()
                                     except Exception as pvp_e:
                                         player.add_message("An error occurred during PvP combat.", "error_critical")
                                         if config.DEBUG_MODE: print(f"ERROR PVP combat: {pvp_e}"); traceback.print_exc()
+                                    
                                     if combat_results:
                                         if combat_results.get('attacker_messages'):
                                             for msg in combat_results['attacker_messages']: player.add_message(msg['text'], msg['type'])
-                                        if combat_results.get('target_messages'):
-                                            for msg in combat_results['target_messages']: target_player_object.add_message(msg['text'], msg['type'])
+                                        
+                                        # Ensure target_player_object is still valid before sending messages
+                                        valid_target_player = active_players.get(target_player_object.sid) if target_player_object else None
+                                        if valid_target_player and combat_results.get('target_messages'):
+                                            for msg in combat_results['target_messages']: valid_target_player.add_message(msg['text'], msg['type'])
+                                        
                                         if combat_results.get('room_messages'):
                                             for msg_info in combat_results['room_messages']:
-                                                broadcast_to_room(player.current_room_id, msg_info['text'], msg_info['type'], exclude_sids=[player.sid, target_player_object.sid])
+                                                exclude_sids_pvp = [player.sid]
+                                                if valid_target_player: exclude_sids_pvp.append(valid_target_player.sid)
+                                                broadcast_to_room(player.current_room_id, msg_info['text'], msg_info['type'], exclude_sids=exclude_sids_pvp)
+                                        
                                         if combat_results.get('defeated_player_sid'):
-                                            defeated_player = active_players.get(combat_results['defeated_player_sid'])
-                                            if defeated_entity_template.get("leaves_corpse", True):
-                                                corpse_data = loot_handler.create_corpse_object_data(
-                                                    defeated_entity_template,
-                                                    defeated_runtime_id_from_combat,
-                                                    GAME_ITEMS, # This is game_items_data
-                                                    GAME_EQUIPMENT_TABLES # Pass the equipment tables
-                                                )
-                                            if corpse_data and current_room_data:
-                                            # ...if defeated_player:
+                                            defeated_player_sid = combat_results['defeated_player_sid']
+                                            defeated_player = active_players.get(defeated_player_sid)
+                                            if defeated_player:
                                                 player.add_message(f"You have defeated {defeated_player.name}!", "event_pvp_victory")
                                                 defeated_player.add_message(f"You have been defeated by {player.name}!", "event_pvp_defeat_major")
                                                 broadcast_to_room(player.current_room_id, f"{defeated_player.name} falls in battle to {player.name}!", "ambient_pvp_defeat", [player.sid, defeated_player.sid])
-                                    player.next_action_time = time.time() + rt_attack
-                                    if target_player_object and target_player_object.sid in active_players and (not combat_results or not combat_results.get('defeated_player_sid')):
-                                        target_player_object.next_action_time = time.time() + rt_attack
-                            elif target_type == "monster" or target_type == "npc":
-                                monster_runtime_id_for_combat = target_id_or_key # For NPCs, key is runtime_id
-                                if target_type == "monster" and target_full_match_data and "runtime_id" in target_full_match_data:
-                                    monster_runtime_id_for_combat = target_full_match_data["runtime_id"]
-                                
-                                combat_results = combat.handle_player_attack(
-                                    player, target_data, target_type, target_arg, GAME_ITEMS,
-                                    monster_runtime_id=monster_runtime_id_for_combat 
-                                )
-                                if combat_results.get('broadcast_message'): broadcast_to_room(player.current_room_id, combat_results['broadcast_message'], "ambient_combat", [player.sid])
-                                if combat_results.get('defeated') and not combat_results.get('already_defeated'):
-                                    defeated_runtime_id_from_combat = combat_results.get('target_runtime_id')
-                                    target_display_name_from_combat = combat_results.get('target_name', 'the creature')
-                                    defeated_entity_template = target_data 
-                                    
-                                    if config.DEBUG_MODE: print(f"DEBUG MAIN_DEFEAT: {player.name} def. {target_display_name_from_combat} (Key:{target_id_or_key}, RuntimeID: {defeated_runtime_id_from_combat})")
+                                                
+                                                # --- Player-Specific Defeat/Drop Logic ---
+                                                # TODO: Implement your specific rules for player defeat (item drops, penalties, respawn)
+                                                # Example: defeated_player.handle_pvp_death_and_drops(GAME_ITEMS, current_room_data)
+                                                if config.DEBUG_MODE: print(f"DEBUG PVP_DEFEAT: {defeated_player.name} defeated by {player.name}.")
+                                                # --- End Player-Specific Defeat/Drop Logic ---
 
-                                    if defeated_entity_template:
-                                        xp_to_award = defeated_entity_template.get("xp_value", defeated_entity_template.get("xp_on_kill", 0)) 
-                                        if xp_to_award > 0 and hasattr(player, 'add_xp_to_pool'): player.add_xp_to_pool(xp_to_award, GAME_RACES)
+                                    player.next_action_time = time.time() + rt_attack
+                                    if valid_target_player and (not combat_results or not combat_results.get('defeated_player_sid')):
+                                        valid_target_player.next_action_time = time.time() + rt_attack
+                                        
+                            elif target_type == "monster" or target_type == "npc":
+                                monster_runtime_id_for_combat = target_id_or_key # For NPCs
+                                if target_type == "monster" and target_full_match_data: # For Monsters, use the more specific runtime_id if available
+                                    monster_runtime_id_for_combat = target_full_match_data.get("runtime_id", target_id_or_key)
+                                
+                                # Ensure target_data (which is defeated_entity_template for NPC/Monster) is valid
+                                defeated_entity_template = target_data
+
+                                combat_results = combat.handle_player_attack(
+                                    player,
+                                    defeated_entity_template, # Pass the template data
+                                    target_type,
+                                    target_arg, # Pass player's raw target string for messages
+                                    GAME_ITEMS,
+                                    monster_runtime_id=monster_runtime_id_for_combat
+                                )
+
+                                if combat_results.get('broadcast_message'):
+                                    broadcast_to_room(player.current_room_id, combat_results['broadcast_message'], "ambient_combat", [player.sid])
+                                
+                                if combat_results.get('defeated') and not combat_results.get('already_defeated'):
+                                    defeated_runtime_id_from_combat = combat_results.get('target_runtime_id') # This should be the unique ID used in combat
+                                    target_display_name_from_combat = combat_results.get('target_name', 'the creature')
+                                    # defeated_entity_template is already defined above (it's target_data for NPC/Mon)
+                                    
+                                    if config.DEBUG_MODE:
+                                        print(f"DEBUG MAIN_DEFEAT: {player.name} def. {target_display_name_from_combat} (Key:{target_id_or_key}, RuntimeID: {defeated_runtime_id_from_combat})")
+
+                                    if defeated_entity_template: # Should always be true if combat happened
+                                        xp_to_award = defeated_entity_template.get("xp_value", defeated_entity_template.get("xp_on_kill", 0))
+                                        if xp_to_award > 0 and hasattr(player, 'add_xp_to_pool'):
+                                            player.add_xp_to_pool(xp_to_award, GAME_RACES)
                                         
                                         for hit in defeated_entity_template.get("faction_hits_on_kill", []):
                                             if isinstance(hit, dict) and hit.get("faction_id") and isinstance(hit.get("amount"), int):
-                                                if hasattr(player, 'update_faction'): player.update_faction(hit["faction_id"], hit["amount"])
+                                                if hasattr(player, 'update_faction'):
+                                                    player.update_faction(hit["faction_id"], hit["amount"])
                                         
                                         if defeated_entity_template.get("leaves_corpse", True):
                                             corpse_data = loot_handler.create_corpse_object_data(
                                                 defeated_entity_template,
-                                                defeated_runtime_id_from_combat, 
-                                                GAME_ITEMS
+                                                defeated_runtime_id_from_combat, # Use the runtime ID used and confirmed by combat module
+                                                GAME_ITEMS,
+                                                GAME_EQUIPMENT_TABLES # Pass the equipment tables
                                             )
-                                            if corpse_data and current_room_data: 
+                                            if corpse_data and current_room_data:
                                                 current_room_data.setdefault("objects", {})[corpse_data["id"]] = corpse_data
                                                 player.add_message(f"The {target_display_name_from_combat} slumps, leaving a corpse.", "event_defeat_corpse")
-                                        else: 
+                                        else:
                                             player.add_message(f"The {target_display_name_from_combat} collapses into nothingness!", "event_defeat")
-                                    else: 
+                                    else:
                                          player.add_message(f"You defeated {target_display_name_from_combat}, but its essence fades.", "event_defeat_major")
 
+                                    # Respawn tracking for NPCs and Monsters
                                     if defeated_runtime_id_from_combat and defeated_entity_template:
-                                        spawn_cfg = defeated_entity_template.get("spawn_config", {}) 
-                                        if not spawn_cfg and target_type == "monster": 
+                                        spawn_cfg = defeated_entity_template.get("spawn_config", {})
+                                        if not spawn_cfg and target_type == "monster":
                                             spawn_cfg = {"respawn_time_seconds": defeated_entity_template.get("respawn_time_seconds"),
-                                                         "spawn_chance": defeated_entity_template.get("respawn_chance"),
+                                                         "spawn_chance": defeated_entity_template.get("respawn_chance"), # Ensure this key matches monster template
                                                          "home_room_id": defeated_entity_template.get("home_room_id")}
+
                                         respawn_time_val = spawn_cfg.get("respawn_time_seconds")
+                                        
                                         if respawn_time_val is not None:
-                                            home_room_id_for_respawn = spawn_cfg.get("home_room_id", player.current_room_id)
+                                            home_room_id_for_respawn = spawn_cfg.get("home_room_id", player.current_room_id) # Default to current room if no home_room_id
+                                            
+                                            # Ensure a valid chance is used
+                                            default_respawn_chance = getattr(config, 'NPC_DEFAULT_RESPAWN_CHANCE', 0.2) if target_type == "npc" else getattr(config, 'MONSTER_DEFAULT_RESPAWN_CHANCE', 0.5)
+                                            respawn_chance_val = float(spawn_cfg.get("spawn_chance", default_respawn_chance))
+
+
                                             TRACKED_DEFEATED_ENTITIES[defeated_runtime_id_from_combat] = {
                                                 "eligible_at": time.time() + float(respawn_time_val),
                                                 "room_id": home_room_id_for_respawn,
                                                 "template_key": target_id_or_key, 
                                                 "type": target_type,
                                                 "is_unique": defeated_entity_template.get("is_unique", False),
-                                                "chance": float(spawn_cfg.get("spawn_chance", getattr(config, 'DEFAULT_RESPAWN_CHANCE', 0.2))),
-                                                # Store original_index_in_room_list if available from target_full_match_data for monsters
-                                                "original_index_in_room_list": target_full_match_data.get("original_index_in_room_list") if target_full_match_data else None
+                                                "chance": respawn_chance_val,
                                             }
-                                            if config.DEBUG_MODE: print(f"DEBUG MAIN_RESPAWN: Added '{defeated_runtime_id_from_combat}' to TRACKED_DEFEATED_ENTITIES for respawn.")
+                                            if config.DEBUG_MODE:
+                                                print(f"DEBUG MAIN_RESPAWN: Added '{defeated_runtime_id_from_combat}' to TRACKED_DEFEATED_ENTITIES for respawn. Details: {TRACKED_DEFEATED_ENTITIES[defeated_runtime_id_from_combat]}")
                                 player.next_action_time = time.time() + rt_attack
                             else: 
                                 player.add_message("You can't attack that!", "error")
