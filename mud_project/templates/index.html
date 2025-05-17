@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Whispers in the Dark - Client</title>
+    <style>
+        /* ... (your existing CSS from index_html_v4_spacing_fix) ... */
+        html, body {
+            height: 100%; margin: 0; padding: 0;
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #111; color: #ddd; overflow: hidden; 
+        }
+        #game-window { display: flex; flex-direction: column; height: 100%; width: 100%; }
+        #stats-area {
+            padding: 10px; border-bottom: 1px solid #444; font-size: 0.9em;
+            background-color: #1a1a1a; white-space: pre-wrap; 
+            flex-shrink: 0; line-height: 1.3;
+        }
+        #output {
+            flex-grow: 1; overflow-y: auto; padding: 10px;
+            border-bottom: 1px solid #444; 
+            white-space: pre-wrap; 
+            line-height: 1.4;
+        }
+        #input-area { 
+            display: flex; 
+            flex-direction: column; /* Stack input and RT bar */
+            padding: 10px; 
+            background-color: #1a1a1a; 
+            flex-shrink: 0; 
+        }
+        #command-input-wrapper {
+            display: flex; /* For input and button */
+            width: 100%;
+        }
+        #input { /* Renamed from command-input for clarity */
+            flex-grow: 1; background-color: #222; color: #ddd;
+            border: 1px solid #444; padding: 8px;
+            font-family: inherit; font-size: 1em;
+        }
+        #send-button { /* Added a send button for consistency if needed */
+            background-color: #030; color: #0f0;
+            border: 1px solid #070; padding: 8px 15px;
+            margin-left: 10px; cursor: pointer;
+        }
+        #send-button:hover { background-color: #050; }
+
+        .message-prefix {
+            color: #888; 
+            font-style: normal;  
+            font-weight: normal; 
+            margin-right: 0.5ch; 
+        }
+        /* Message Type Styling examples */
+        .message-echo {} 
+        .message-error, .message-error_rt, .message-error_critical { color: #ff6b6b; font-weight: bold; }
+        .message-feedback { color: #8fbc8f; } /* Softer green */
+        .message-feedback_move { color: #a2faa3; } /* Slightly brighter green for movement */
+        .message-event_highlight, .message-system_highlight { color: #ffd700; font-weight: bold; } /* Gold/Yellow */
+        .message-system, .message-prompt { color: #add8e6; } /* Light blue */
+        .message-stat_increase { color: #40e0d0; } /* Turquoise */
+        .message-speech_player { color: #87cefa; font-style: italic; } /* Light sky blue */
+        .message-speech_other { color: #dda0dd; font-style: italic; } /* Plum */
+        .message-ambient_npc { color: #a9a9a9; font-style: italic; }  /* Dark gray */
+        .message-ambient_monster { color: #d2b48c; font-style: italic; } /* Tan */
+        .message-ambient_other_player, 
+        .message-ambient_player_arrival, 
+        .message-ambient_player_departure { color: #c8a2c8; font-style: italic; } /* Thistle */
+        .message-event_monster_arrival { color: #ff7f50; font-weight: bold; font-style: italic;} /* Coral */
+        .message-system_tick_marker { color: #666; } 
+        
+        /* Room info specific styling */
+        .room-info-container { margin-bottom: 10px; } /* If you wrap room info */
+        .message-room_name_line { color: #00ffff; font-weight: bold; } /* Cyan */
+        .message-room_description { color: #f0f8ff; margin-top: 0px; padding-left: 2ch; } /* Alice blue, indented */
+        .message-room_presence_line { color: #e6e6fa; font-style: italic; } /* Lavender */
+        .message-room_items_line { color: #98fb98; } /* Pale green */
+        .message-room_exits_line { color: #fadadd; margin-top: 5px;} /* Pink */
+        /* Round Time Bar Styles */
+        #rt-bar-container {
+            width: 100%;
+            height: 10px; /* Height of the main bar */
+            background-color: #333; /* Background of the empty bar area */
+            margin-top: 5px;
+            border: 1px solid #555;
+            border-radius: 3px;
+            display: flex; /* To line up ticks horizontally */
+            overflow: hidden; /* Hide ticks if they overflow (shouldn't happen) */
+            opacity: 0; /* Initially hidden */
+            transition: opacity 0.3s ease-in-out;
+        }
+        #rt-bar-container.active {
+            opacity: 1;
+        }
+        .rt-tick {
+            height: 100%;
+            background-color: #c00; /* Red for active ticks */
+            border-right: 1px solid #500; /* Separator for ticks */
+            box-sizing: border-box;
+            transition: width 0.2s linear, opacity 0.3s linear; /* Smooth removal */
+        }
+        .rt-tick.fading {
+            opacity: 0;
+            width: 0 !important; /* Force width to 0 when fading */
+        }
+
+    </style>
+</head><body>
+    <div id="game-window">
+        <div class="stats-display" id="stats-area">
+            Name: - | Lvl: - | XP: -/- (Pool: -)<br>HP: -/- | MP: -/- | SP: -/- | Gold: -<br>RT: -
+        </div>
+        <div id="output"></div>
+        <div id="input-area">
+            <div id="rt-bar-container">
+                </div>
+            <div id="command-input-wrapper">
+                <input type="text" id="input" placeholder="Enter command..." autofocus>
+                </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        const output = document.getElementById('output');
+        const commandInput = document.getElementById('input'); // Changed from 'input' to 'commandInput'
+        const statsArea = document.getElementById('stats-area');
+        const rtBarContainer = document.getElementById('rt-bar-container');
+
+        const commandHistory = [];
+        let historyIndex = -1;
+        let rtIntervalId = null; // To store the interval ID for clearing
+
+        console.log("CLIENT: Script loaded.");
+
+        function appendOutput(element) {
+            const scrollThreshold = 30; 
+            const isScrolledToBottom = output.scrollHeight - output.clientHeight <= output.scrollTop + scrollThreshold;
+            output.appendChild(element);
+            if (isScrolledToBottom) {
+                output.scrollTop = output.scrollHeight;
+            }
+        }
+
+        function createPrefixedMessageLine(text, type) {
+            const lineDiv = document.createElement('div');
+            lineDiv.className = 'prefixed-line message-' + type; 
+            const prefixSpan = document.createElement('span');
+            prefixSpan.className = 'message-prefix';
+            prefixSpan.textContent = '>'; 
+            lineDiv.appendChild(prefixSpan);
+            const textNode = document.createTextNode(text); 
+            lineDiv.appendChild(textNode);
+            return lineDiv;
+        }
+
+        function addMessage(text, type = 'normal') {
+            const messageText = (text === null || text === undefined) ? String(text) : text;
+
+            if (type === 'echo') { 
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message-' + type;
+                const prefixSpan = document.createElement('span');
+                prefixSpan.className = 'message-prefix';
+                prefixSpan.textContent = '>';
+                messageDiv.appendChild(prefixSpan);
+                messageDiv.appendChild(document.createTextNode(String(messageText).substring(1))); 
+                appendOutput(messageDiv);
+                return;
+            }
+            if (type === 'system_tick_marker' && messageText === '>') {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message-' + type; 
+                const prefixSpan = document.createElement('span');
+                prefixSpan.className = 'message-prefix'; 
+                prefixSpan.textContent = '>';
+                messageDiv.appendChild(prefixSpan);
+                appendOutput(messageDiv);
+                return;
+            }
+            // Special handling for round time error messages
+            if (type === 'error_rt' && messageText.toLowerCase().startsWith('wait')) {
+                const waitTimeMatch = messageText.match(/wait\s*([\d.]+)\s*s/i);
+                if (waitTimeMatch && waitTimeMatch[1]) {
+                    const durationSeconds = parseFloat(waitTimeMatch[1]);
+                    startRoundTimeBar(durationSeconds);
+                }
+            }
+
+            const lines = String(messageText).split('\n'); 
+            lines.forEach(line => {
+                appendOutput(createPrefixedMessageLine(line, type));
+            });
+        }
+        
+        function displayRoomInfo(roomData) { 
+            if (!roomData || typeof roomData !== 'object') { 
+                console.error("CLIENT: displayRoomInfo called with invalid data:", roomData);
+                addMessage("Error: Received invalid room data from server.", "error_critical");
+                return;
+            }
+            appendOutput(createPrefixedMessageLine(`[${roomData.name || 'Unknown Room'}]`, 'room_name_line'));
+            const descDiv = document.createElement('div');
+            descDiv.className = 'message-room_description';
+            descDiv.textContent = roomData.description || 'No description available.';
+            appendOutput(descDiv);
+            if (roomData.presence_summary && roomData.presence_summary.length > 0) { 
+                appendOutput(createPrefixedMessageLine(roomData.presence_summary, 'room_presence_line'));
+            }
+            if (roomData.items && Array.isArray(roomData.items) && roomData.items.length > 0) {
+                appendOutput(createPrefixedMessageLine(`YOU ALSO SEE: ${roomData.items.join(', ')}.`, 'room_items_line'));
+            }
+            appendOutput(createPrefixedMessageLine(`OBVIOUS EXITS: ${roomData.exits || 'None'}`, 'room_exits_line'));
+        }
+
+        function displayRaceOptions(racePayload) { 
+            if (!racePayload || typeof racePayload !== 'object') {
+                console.error("CLIENT: displayRaceOptions called with invalid data:", racePayload);
+                addMessage("Error: Received invalid race data from server.", "error_critical");
+                return;
+            }
+            if (racePayload.prompt_text) {
+                 addMessage(racePayload.prompt_text, 'prompt'); 
+            }
+            if (racePayload.races && Array.isArray(racePayload.races)) {
+                addMessage("--- Available Heritages ---", "system_highlight");
+                racePayload.races.forEach(race => {
+                    addMessage(`${race.name.toUpperCase()} (Type: ${race.key})`, 'system_highlight');
+                    addMessage(`  ${race.description}`, 'info'); 
+                    if (race.stat_modifiers && Object.keys(race.stat_modifiers).length > 0) {
+                        let modifiersStr = Object.entries(race.stat_modifiers)
+                            .map(([stat, val]) => `${stat.toUpperCase()} ${val > 0 ? '+' : ''}${val}`)
+                            .join(', ');
+                        addMessage(`  Stat Modifiers: ${modifiersStr}`, 'feedback');
+                    }
+                    if (race.lore_snippet) {
+                        addMessage(`  "${race.lore_snippet}"`, 'narrative_emotive');
+                    }
+                    const spacer = document.createElement('div'); 
+                    spacer.innerHTML = '&nbsp;';
+                    appendOutput(spacer); 
+                });
+                addMessage("---------------------------", "system_highlight");
+            } else {
+                addMessage("No race options available at this time.", "system_info");
+            }
+        }
+
+        // --- Round Time Bar Logic ---
+        function startRoundTimeBar(durationSeconds) {
+            if (rtIntervalId) {
+                clearInterval(rtIntervalId); // Clear any existing interval
+            }
+            rtBarContainer.innerHTML = ''; // Clear previous ticks
+            rtBarContainer.classList.add('active');
+            commandInput.disabled = true; // Disable input during RT
+
+            const totalTicks = Math.max(1, Math.ceil(durationSeconds)); // At least one tick
+            const tickDurationMs = (durationSeconds * 1000) / totalTicks;
+            
+            for (let i = 0; i < totalTicks; i++) {
+                const tickElement = document.createElement('div');
+                tickElement.className = 'rt-tick';
+                tickElement.style.width = `${100 / totalTicks}%`; // Distribute width
+                rtBarContainer.appendChild(tickElement);
+            }
+
+            let ticksToRemove = totalTicks;
+            rtIntervalId = setInterval(() => {
+                const ticks = rtBarContainer.querySelectorAll('.rt-tick:not(.fading)');
+                if (ticks.length > 0) {
+                    ticks[ticks.length - 1].classList.add('fading'); // Fade out the last visible tick
+                }
+                ticksToRemove--;
+                if (ticksToRemove <= 0) {
+                    clearInterval(rtIntervalId);
+                    rtIntervalId = null;
+                    setTimeout(() => { // Delay hiding to allow fade out
+                        rtBarContainer.classList.remove('active');
+                        rtBarContainer.innerHTML = ''; // Clear fully
+                        commandInput.disabled = false;
+                        commandInput.focus();
+                        console.log("CLIENT: Round time finished.");
+                    }, 300); // Match transition duration
+                }
+            }, tickDurationMs);
+        }
+
+
+        commandInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                const command = commandInput.value;
+                if (command && !commandInput.disabled) { // Check if input is enabled
+                    if (commandHistory.length === 0 || command !== commandHistory[commandHistory.length - 1]) {
+                        commandHistory.push(command);
+                    }
+                    if (commandHistory.length > 20) commandHistory.shift(); 
+                    historyIndex = commandHistory.length;
+                    socket.emit('player_command', { command: command });
+                    commandInput.value = '';
+                }
+            }
+        });
+        // ... (keydown for history remains same) ...
+        commandInput.addEventListener('keydown', (event) => {
+            if (commandInput.disabled && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+                event.preventDefault(); return; // Prevent history navigation if disabled
+            }
+            if (commandHistory.length === 0 && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+                 event.preventDefault(); return;
+            }
+            if (event.key === 'ArrowUp') {
+                event.preventDefault(); 
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    commandInput.value = commandHistory[historyIndex] || '';
+                    commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
+                } else if (historyIndex === 0 && commandHistory.length > 0) {
+                    commandInput.value = commandHistory[0] || ''; 
+                    commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
+                }
+            } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    commandInput.value = commandHistory[historyIndex] || '';
+                } else { 
+                     historyIndex = commandHistory.length; 
+                     commandInput.value = ''; 
+                }
+                commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
+            }
+        });
+
+        socket.on('connect', () => { console.log("CLIENT: Socket connected. SID:", socket.id); });
+        socket.on('disconnect', (reason) => { 
+            console.error("CLIENT: Socket disconnected. Reason:", reason);
+            addMessage(`Disconnected from server. Reason: ${reason}`, 'error_critical'); 
+            if (rtIntervalId) clearInterval(rtIntervalId); // Clear RT bar on disconnect
+            rtBarContainer.classList.remove('active');
+            commandInput.disabled = false;
+        });
+        socket.on('connect_error', (error) => {
+            console.error("CLIENT: Socket connection error:", error);
+            addMessage(`Connection error: ${error.message || error}`, 'error_critical');
+        });
+
+        socket.on('game_messages', (data) => {
+            console.log("CLIENT: Received 'game_messages' batch:", data);
+            if (data.messages && Array.isArray(data.messages)) {
+                data.messages.forEach(msg => {
+                    console.log("CLIENT: Processing message object:", msg);
+                    if (msg.type === 'room_data_update') {
+                        displayRoomInfo(msg); 
+                    } else if (msg.type === 'display_race_options') {
+                        displayRaceOptions(msg); 
+                    } else if (msg.text !== undefined) { 
+                        addMessage(msg.text, msg.type || 'normal');
+                    } else {
+                        console.warn("CLIENT: Received unhandled structured message (no .text and not a known special type):", msg);
+                    }
+                });
+            } else {
+                console.warn("CLIENT: Received 'game_messages' but data.messages is not a valid array:", data);
+            }
+        });
+        
+        socket.on('stats_update', (data) => {
+            console.log("CLIENT: Received 'stats_update':", data);
+            if (data) {
+                let statsText = "Stats: "; 
+                if (data.raw_stats && typeof data.raw_stats === 'object') { 
+                    statsText = `Name: ${data.raw_stats.name || '-'} | Lvl: ${data.raw_stats.level || '-'} | XP: ${data.raw_stats.xp || '-'}/- (Pool: -)<br>HP: ${data.raw_stats.hp || '-'}/${data.raw_stats.max_hp || '-'} | MP: ${data.raw_stats.mp || '-'}/${data.raw_stats.max_mp || '-'} | SP: ${data.raw_stats.sp || '-'}/${data.raw_stats.max_sp || '-'} | Gold: -<br>RT: -`;
+                } else if (data.stats_text) { 
+                    statsText = data.stats_text;
+                }
+                statsArea.innerHTML = statsText; 
+            }
+        });
+        socket.on('error_message', (data) => { 
+            console.error("CLIENT: Received 'error_message':", data);
+            addMessage(`SERVER ERROR: ${data.message}`, 'error_critical'); 
+        });
+        
+        window.onload = () => { 
+            console.log("CLIENT: Window loaded. Focusing input.");
+            commandInput.focus(); 
+            addMessage("Connecting to server...", "system"); 
+        };
+    </script>
+</body>
+</html>
