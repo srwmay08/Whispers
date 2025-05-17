@@ -70,7 +70,7 @@ DEFAULT_ROOMS = {
         "tags": ["town", "gate", "defense", "oakhaven"],
         "searching": True,
         "hiding": True,
-        "pvp": False,
+        "pvp": True,
         "shouting": True,
         "is_outdoor": True, # Defaulted from Room 1
         "is_underground": False, # Defaulted from Room 1

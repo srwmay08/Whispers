@@ -194,37 +194,39 @@
             });
         }
         
-        function displayRoomInfo(roomData) {
+// In your <script> tag within templates/index.html
+
+    function displayRoomInfo(roomData) {
             if (!roomData || typeof roomData !== 'object') {
                 console.error("CLIENT: displayRoomInfo called with invalid data:", roomData);
                 addMessage("Error: Received invalid room data from server.", "error_critical");
                 return;
             }
-            // Display room name (already correct)
+
+            // Display room name
             appendOutput(createPrefixedMessageLine(`[${roomData.name || 'Unknown Room'}]`, 'room_name_line'));
 
-            // Display room description (already correct)
+            // Display room description
             const descDiv = document.createElement('div');
-            descDiv.className = 'message-room_description';
+            descDiv.className = 'message-room_description'; // Use a class that doesn't add ">"
             descDiv.textContent = roomData.description || 'No description available.';
-            appendOutput(descDiv);
+            appendOutput(descDiv); // Append directly, no ">" prefix from createPrefixedMessageLine
 
-            // Display presence summary (NPCs, other players, monsters - already correct)
-            if (roomData.presence_summary && roomData.presence_summary.length > 0) {
+            // Display presence summary (NPCs, other players, monsters)
+            // This string comes from the server already formatted with "ALSO HERE: ..."
+            if (roomData.presence_summary && roomData.presence_summary.trim().length > 0) {
+                 // We'll use createPrefixedMessageLine for the ">" prefix, but the content is already good.
                 appendOutput(createPrefixedMessageLine(roomData.presence_summary, 'room_presence_line'));
             }
 
-            // CORRECTED: Display items summary (corpses, items on ground)
-            if (roomData.items_summary && roomData.items_summary.length > 0) { // Check for items_summary
-                // The items_summary from server is already formatted like "YOU ALSO SEE: Item A, Item B."
-                // So we don't need to add "YOU ALSO SEE:" again here.
-                // If your server does NOT include "YOU ALSO SEE:", then add it:
-                // appendOutput(createPrefixedMessageLine(`YOU ALSO SEE: ${roomData.items_summary}`, 'room_items_line'));
-                // If your server already includes it:
+            // Display items summary (corpses, items on ground)
+            // This string comes from the server already formatted with "YOU ALSO SEE: ..."
+            if (roomData.items_summary && roomData.items_summary.trim().length > 0) {
+                // We'll use createPrefixedMessageLine for the ">" prefix.
                 appendOutput(createPrefixedMessageLine(roomData.items_summary, 'room_items_line'));
             }
 
-            // Display exits (already correct)
+            // Display exits
             appendOutput(createPrefixedMessageLine(`OBVIOUS EXITS: ${roomData.exits || 'None'}`, 'room_exits_line'));
         }
 
