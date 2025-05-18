@@ -68,7 +68,7 @@ def get_entity_armor_type(entity_data_runtime, game_items_global: dict) -> str:
 
 def calculate_attack_strength(attacker_name: str, attacker_stats: dict, attacker_skills: dict, 
                               weapon_item_data: dict | None, target_armor_type: str) -> int:
-    as_val = 0; as_components_log = [] # For detailed server log
+    as_val = 0; as_components_log = [] 
     weapon_name_display = "Barehanded"
     if not weapon_item_data or weapon_item_data.get("type") != "weapon":
         strength_barehanded = attacker_stats.get("strength", config.STAT_BONUS_BASELINE)
@@ -87,7 +87,7 @@ def calculate_attack_strength(attacker_name: str, attacker_stats: dict, attacker
         as_val += str_bonus; as_components_log.append(f"Str({str_bonus})")
         weapon_skill_name = weapon_item_data.get("skill"); skill_bonus_val = 0
         if weapon_skill_name:
-            skill_rank = attacker_skills.get(weapon_skill_name, 0)
+            skill_rank = attacker_skills.get(weapon_skill_name, 0) # Will use 0 if skill not in dict
             skill_bonus_val = get_skill_bonus(skill_rank, config.WEAPON_SKILL_AS_BONUS_DIVISOR)
             as_val += skill_bonus_val; as_components_log.append(f"Skill({skill_bonus_val})")
         weapon_base_as = weapon_item_data.get("weapon_as_bonus", 0) 
@@ -234,8 +234,10 @@ def handle_entity_attack(attacker_entity_data: dict, attacker_entity_type: str, 
     
     entity_roll_log_string = f"ENTITY_ATTACK_ROLL: {attacker_display_name} (AS:{attacker_as}) vs {defender_player.name} (DS:{defender_ds}) + AvD:{config.COMBAT_ADVANTAGE_FACTOR} + d100:{d100_roll} = {combat_roll_result}"
     if config.DEBUG_MODE and getattr(config, 'DEBUG_COMBAT_ROLLS', False): print(entity_roll_log_string)
-    # Optionally, send a simplified roll insight to the player if desired
-    # defender_player.add_message(f"  (The {attacker_display_name} attacks with {('skill' if combat_roll_result > 70 else 'some effort')}!)", "combat_roll_details_opponent")
+    
+    # Send simplified roll to player for entity attacks
+    player_facing_roll_string = f"  (Roll: {attacker_display_name} AS {attacker_as} vs Your DS {defender_ds} -> Result {combat_roll_result})"
+    defender_player.add_message(player_facing_roll_string, "combat_roll_details_opponent") # New type for opponent roll
 
 
     results = {'hit': False, 'damage': 0, 'defender_defeated': False, 
@@ -247,9 +249,9 @@ def handle_entity_attack(attacker_entity_data: dict, attacker_entity_type: str, 
         flat_base_damage_component = 0
         if attacker_weapon_data and attacker_weapon_data.get("type") == "weapon":
             flat_base_damage_component = attacker_weapon_data.get("weapon_as_bonus", 0) + attacker_weapon_data.get("enchantment_as_bonus", 0)
-        else: # Natural attacks
+        else:
             flat_base_damage_component = getattr(config, 'BAREHANDED_FLAT_DAMAGE', 1) 
-            flat_base_damage_component += attacker_entity_data.get("natural_attack_bonus_damage", 0) # Add specific bonus if defined in template
+            flat_base_damage_component += attacker_entity_data.get("natural_attack_bonus_damage", 0)
         if config.DEBUG_MODE and getattr(config, 'DEBUG_COMBAT_ROLLS', False): print(f"DEBUG DMG (Entity): Base Dmg Comp: {flat_base_damage_component}")
 
         damage_bonus_from_roll = max(0, (combat_roll_result - config.COMBAT_HIT_THRESHOLD) // config.COMBAT_DAMAGE_MODIFIER_DIVISOR)
@@ -265,7 +267,7 @@ def handle_entity_attack(attacker_entity_data: dict, attacker_entity_type: str, 
             results['defender_message'] = {"text": f"  The {attacker_display_name}'s blow lands true! You have been DEFEATED!", "type": "event_defeat_major"}
             results['broadcast_message'] = {"text": f"{defender_player.name} has been struck down by the {attacker_display_name}!", "type": "ambient_defeat"}
             defender_player.current_room_id = getattr(config, 'PLAYER_DEATH_ROOM_ID', 1)
-            defender_player.hp = 1 # Or other death logic
+            defender_player.hp = 1 
     else:
         results['defender_message'] = {"text": f"  The {attacker_display_name} MISSES you!", "type": "combat_miss_by_opponent"}
         results['broadcast_message'] = {"text": f"The {attacker_display_name} attacks {defender_player.name} with its {weapon_name_for_msg} but MISSES!", "type": "ambient_combat"}
@@ -292,7 +294,10 @@ def handle_player_attack_pvp(attacker_player: player_class.Player, defender_play
     combat_roll_result = (attacker_as - defender_ds) + config.COMBAT_ADVANTAGE_FACTOR + d100_roll
     
     roll_string = f"  AS: {attacker_as:+} vs DS: {defender_ds:+} with AvD: {config.COMBAT_ADVANTAGE_FACTOR:+} + d100 roll: {d100_roll:+} = {combat_roll_result:+}"
-    attacker_player.add_message(roll_string, "combat_roll_details")
+    attacker_player.add_message(roll_string, "combat_roll_details") # For attacker
+    # Also send to defender in PvP
+    defender_player.add_message(f"{attacker_player.name} attacks you! (Roll: {combat_roll_result})", "combat_action_opponent") # Simplified for defender
+    defender_player.add_message(roll_string, "combat_roll_details_opponent") # Defender sees the same roll details
 
     results = {'hit': False, 'damage': 0, 'defender_defeated': False, 'attacker_message': None, 'defender_message': None, 'broadcast_message': ""}
     broadcast_msg_text = f"{attacker_player.name} attacks {defender_player.name} with {weapon_name_for_broadcast}."
@@ -307,23 +312,23 @@ def handle_player_attack_pvp(attacker_player: player_class.Player, defender_play
         total_damage = max(1, flat_base_damage_component + damage_bonus_from_roll)
         results['damage'] = total_damage; defender_player.hp -= total_damage
         
-        results['attacker_message'] = {"text": f"  ...and HIT {defender_player.name} for {total_damage} damage!", "type": "combat_hit_player"}
-        results['defender_message'] = {"text": f"{attacker_player.name} HITS you with their {weapon_name_for_broadcast} for {total_damage} damage! (HP: {defender_player.hp}/{defender_player.max_hp})", "type": "combat_hit_by_opponent"}
+        attacker_player.add_message(f"  ...and HIT {defender_player.name} for {total_damage} damage!", "combat_hit_player") # Attacker's hit confirmation
+        defender_player.add_message(f"  {attacker_player.name} HITS you for {total_damage} damage! (HP: {defender_player.hp}/{defender_player.max_hp})", "combat_hit_by_opponent") # Defender's message
         broadcast_msg_text += f" and HITS for {total_damage} damage!"
 
         if defender_player.hp <= 0:
             results['defender_defeated'] = True; defender_player.hp = 0
-            results['attacker_message'] = {"text": f"  You have DEFEATED {defender_player.name} in combat!", "type": "event_pvp_victory"}
-            results['defender_message'] = {"text": f"You have been DEFEATED by {attacker_player.name}!", "type": "event_pvp_defeat_major"}
+            attacker_player.add_message(f"  You have DEFEATED {defender_player.name} in combat!", "event_pvp_victory")
+            defender_player.add_message(f"You have been DEFEATED by {attacker_player.name}!", "event_pvp_defeat_major")
             broadcast_msg_text += f" {defender_player.name} has been defeated!"
             defender_player.current_room_id = getattr(config, 'PLAYER_DEATH_ROOM_ID', 1)
             defender_player.hp = 1
         else:
-            results['attacker_message'] = {"text": f"  {defender_player.name} looks wounded. (Est. HP: {defender_player.hp}/{defender_player.max_hp})", "type": "combat_status_target"}
+            attacker_player.add_message(f"  {defender_player.name} looks wounded. (Est. HP: {defender_player.hp}/{defender_player.max_hp})", "combat_status_target")
             broadcast_msg_text += f" {defender_player.name} is wounded."
     else:
-        results['attacker_message'] = {"text": f"  ...but you MISS {defender_player.name}!", "type": "combat_miss_player"}
-        results['defender_message'] = {"text": f"{attacker_player.name} attacks you with their {weapon_name_for_broadcast} but MISSES!", "type": "combat_miss_by_opponent"}
+        attacker_player.add_message(f"  ...but you MISS {defender_player.name}!", "combat_miss_player")
+        defender_player.add_message(f"  {attacker_player.name} attacks you with their {weapon_name_for_broadcast} but MISSES!", "combat_miss_by_opponent")
         broadcast_msg_text += " and MISSES!"
     
     results['broadcast_message'] = broadcast_msg_text

@@ -57,12 +57,7 @@ game_loop_active = True
 # --- HELPER FUNCTION DEFINITIONS ---
 def get_opposite_direction(direction: str) -> str:
     direction_lower = str(direction).lower()
-    opposites = {
-        "north": "the south", "south": "the north", "east": "the west", "west": "the east",
-        "up": "below", "down": "above", "northeast": "the southwest",
-        "northwest": "the southeast", "southeast": "the northwest", "southwest": "the northeast",
-        "in": "out", "out": "in"
-    }
+    opposites = {"north": "the south", "south": "the north", "east": "the west", "west": "the east", "up": "below", "down": "above", "northeast": "the southwest", "northwest": "the southeast", "southeast": "the northwest", "southwest": "the northeast", "in": "out", "out": "in"}
     return opposites.get(direction_lower, f"another direction ({direction_lower})")
 
 def send_player_stats_update(player_object: player_class.Player):
@@ -75,15 +70,12 @@ def send_player_stats_update(player_object: player_class.Player):
 
 def broadcast_to_room(room_id, message_text, message_type="ambient_other_player", exclude_sids=None):
     if exclude_sids is None: exclude_sids = []
-    try:
-        room_id_int = int(room_id)
+    try: room_id_int = int(room_id)
     except ValueError:
         if config.DEBUG_MODE: print(f"DEBUG BROADCAST_TO_ROOM: Invalid room_id format '{room_id}'.")
         return
     for sid_broadcast, player_obj_broadcast in list(active_players.items()):
-        if hasattr(player_obj_broadcast, 'current_room_id') and \
-           player_obj_broadcast.current_room_id == room_id_int and \
-           sid_broadcast not in exclude_sids:
+        if hasattr(player_obj_broadcast, 'current_room_id') and player_obj_broadcast.current_room_id == room_id_int and sid_broadcast not in exclude_sids:
             player_obj_broadcast.add_message(message_text, message_type)
 
 def send_room_description(player_object: player_class.Player):
@@ -100,8 +92,7 @@ def send_room_description(player_object: player_class.Player):
         if player_handler: player_handler.save_player(player_object)
         room_data = GAME_ROOMS.get(player_object.current_room_id)
         if not room_data:
-            player_object.add_message({"text": "Lost in the void. Contact an admin.", "type": "error_critical"})
-            return
+            player_object.add_message({"text": "Lost in the void. Contact an admin.", "type": "error_critical"}); return
 
     final_room_description = environment_system.get_description_for_room(room_data)
     all_present_names = []
@@ -122,14 +113,30 @@ def send_room_description(player_object: player_class.Player):
     if monster_names_list_for_room_desc: all_present_names.extend(monster_names_list_for_room_desc)
     all_present_names.sort()
     present_entities_str = "ALSO HERE: " + ", ".join(all_present_names) + "." if all_present_names else ""
-    visible_item_names = []
+    
+    # --- Loot Visibility Fix ---
+    visible_item_names_with_counts = {}
+    # Static items from room definition (less likely to have multiples of same ID here)
     for item_id_static in room_data.get("items", []):
         item_tpl_static = GAME_ITEMS.get(item_id_static)
-        if item_tpl_static: visible_item_names.append(item_tpl_static.get("name", item_id_static))
+        if item_tpl_static:
+            name = item_tpl_static.get("name", item_id_static)
+            visible_item_names_with_counts[name] = visible_item_names_with_counts.get(name, 0) + 1
+            
+    # Dynamic items (corpses, dropped items) from room's "objects"
     for obj_id_dyn, obj_data_dynamic in room_data.get("objects", {}).items():
         if obj_data_dynamic.get("is_corpse") or obj_data_dynamic.get("is_ground_item"):
-            visible_item_names.append(obj_data_dynamic.get("name", "an object"))
-    items_on_ground_str = "YOU ALSO SEE: " + (", ".join(sorted(list(set(visible_item_names)))) + "." if visible_item_names else "(nothing)")
+            name = obj_data_dynamic.get("name", "an object")
+            visible_item_names_with_counts[name] = visible_item_names_with_counts.get(name, 0) + 1
+
+    items_on_ground_str_parts = []
+    if visible_item_names_with_counts:
+        for name, count in sorted(visible_item_names_with_counts.items()):
+            items_on_ground_str_parts.append(f"{name}{f' (x{count})' if count > 1 else ''}")
+    
+    items_on_ground_str = "YOU ALSO SEE: " + (", ".join(items_on_ground_str_parts) + "." if items_on_ground_str_parts else "(nothing)")
+    # --- End Loot Visibility Fix ---
+
     room_data_payload = {
         "name": room_data.get("name", "Nowhere Special"), "description": final_room_description,
         "presence_summary": present_entities_str, "items_summary": items_on_ground_str,
@@ -314,7 +321,6 @@ def handle_disconnect():
     if sid in player_creation_sessions:
         player_creation_sessions.pop(sid, None)
         if config.DEBUG_MODE: print(f"DEBUG: Player creation session for SID {sid} cleared on disconnect.")
-    # Clear from combat participants if player disconnects
     for entity_id, combat_info in list(ENTITY_COMBAT_PARTICIPANTS.items()):
         if combat_info.get("target_sid") == sid:
             ENTITY_COMBAT_PARTICIPANTS.pop(entity_id, None)
@@ -323,7 +329,6 @@ def handle_disconnect():
         if threat_info.get("target_sid") == sid:
              THREATENING_ENTITIES_TIMERS.pop(entity_id, None)
              if config.DEBUG_AI_AGGRO: print(f"DEBUG AI: Threat timer for entity {entity_id} targeting disconnected player {sid} cleared.")
-
     if config.DEBUG_MODE: print(f"DEBUG: Client SID {sid} session fully closed after disconnect.")
 
 @socketio.on('player_command')
@@ -337,7 +342,7 @@ def handle_player_command(data):
         player = active_players.get(sid)
         session = player_creation_sessions.get(sid)
 
-        if player: # Player is logged in
+        if player: 
             player.add_message(f"> {command_input}", "echo")
             if hasattr(player, 'next_action_time') and time.time() < player.next_action_time:
                 player.add_message(f"Wait {max(0.0, round(player.next_action_time - time.time(), 1))}s.", "error_rt")
@@ -449,32 +454,21 @@ def handle_player_command(data):
                                     if target_type == "monster" and target_full_match_data: entity_runtime_id_for_pve_attack = target_full_match_data.get("runtime_id", target_id_or_key)
                                     combat_results = combat.handle_player_attack(player, target_data_obj, target_type, target_arg, GAME_ITEMS, monster_runtime_id=entity_runtime_id_for_pve_attack)
                                     if combat_results.get('broadcast_message'): broadcast_to_room(player.current_room_id, combat_results['broadcast_message'], "ambient_combat", [player.sid])
-                                    
-                                    # NPC Retaliation: If player attacks an NPC, make the NPC hostile to the player
                                     if target_type == "npc" and not combat_results.get('already_defeated'):
-                                        npc_template_data = target_data_obj # This is the NPC's template
-                                        npc_runtime_id = entity_runtime_id_for_pve_attack # Which is the NPC's key
+                                        npc_template_data = target_data_obj; npc_runtime_id = entity_runtime_id_for_pve_attack
                                         npc_aggro_behavior = npc_template_data.get("aggression_behavior", {})
-                                        # Check if NPC is not already fighting and isn't set to be purely passive
-                                        if not ENTITY_COMBAT_PARTICIPANTS.get(npc_runtime_id) and \
-                                           npc_aggro_behavior.get("base_disposition", config.DISPOSITION_NEUTRAL) != config.DISPOSITION_PASSIVE:
-                                            
-                                            ENTITY_COMBAT_PARTICIPANTS[npc_runtime_id] = {
-                                                "target_sid": player.sid,
-                                                "next_attack_time": time.time() # Retaliate on next AI combat tick
-                                            }
+                                        if not ENTITY_COMBAT_PARTICIPANTS.get(npc_runtime_id) and npc_aggro_behavior.get("base_disposition", config.DISPOSITION_NEUTRAL) != config.DISPOSITION_PASSIVE:
+                                            ENTITY_COMBAT_PARTICIPANTS[npc_runtime_id] = {"target_sid": player.sid, "next_attack_time": time.time()}
                                             if config.DEBUG_AI_AGGRO: print(f"DEBUG AI AGGRO: NPC {npc_template_data.get('name')} provoked by {player.name}, will retaliate.")
                                             player.add_message(f"The {npc_template_data.get('name')} becomes enraged by your attack!", "event_monster_arrival")
                                             broadcast_to_room(player.current_room_id, f"The {npc_template_data.get('name')} flies into a rage at {player.name}!", "ambient_warning", [player.sid])
-
                                     if combat_results.get('defeated') and not combat_results.get('already_defeated'):
                                         defeated_runtime_id = combat_results.get('target_runtime_id'); defeated_name = combat_results.get('target_name', 'creature')
                                         xp_val = target_data_obj.get("xp_value", 0)
                                         if xp_val > 0 and hasattr(player, 'add_xp_to_pool'): player.add_xp_to_pool(xp_val, GAME_RACES)
                                         faction_hits = target_data_obj.get("faction_hits_on_kill", []) 
                                         if faction_hits and hasattr(player, 'update_faction'):
-                                            for hit in faction_hits:
-                                                player.update_faction(hit["faction_id"], hit["amount"])
+                                            for hit in faction_hits: player.update_faction(hit["faction_id"], hit["amount"])
                                         resp_time = target_data_obj.get("respawn_time_seconds", 300)
                                         if "spawn_config" in target_data_obj: resp_time = target_data_obj["spawn_config"].get("respawn_time_seconds", resp_time)
                                         TRACKED_DEFEATED_ENTITIES[defeated_runtime_id] = {"template_key": target_id_or_key, "type": target_type, "room_id": player.current_room_id, "defeated_at": time.time(), "eligible_at": time.time() + resp_time, "chance": target_data_obj.get("respawn_chance", 0.5), "is_unique": target_data_obj.get("is_unique", False), "original_instance_index": target_full_match_data.get("original_index_in_room_list") if target_full_match_data else None}
@@ -653,7 +647,7 @@ def handle_player_command(data):
             if all_msgs: socketio.emit('game_messages', {'messages': all_msgs}, room=sid)
             send_player_stats_update(player)
 
-        elif session: # Player in creation/login process
+        elif session: 
             player_shell = session.get("player_shell"); current_phase = session.get("phase")
             def send_creation_messages(s_id, sess, p_shell_optional):
                 messages_to_client = []
@@ -818,7 +812,7 @@ def game_tick_loop():
                 else: 
                     try:
                         parts = entity_runtime_id.split('_'); m_room_id_str = parts[0]; m_instance_index_str = parts[-1]; m_template_key = "_".join(parts[1:-1])
-                        m_template_key_debug = m_template_key # For logging
+                        m_template_key_debug = m_template_key 
                         if not m_room_id_str.isdigit() or not m_instance_index_str.isdigit():
                              if config.DEBUG_AI_AGGRO: print(f"DEBUG COMBAT AI: Malformed monster runtime_id '{entity_runtime_id}'. Skipping."); ENTITY_COMBAT_PARTICIPANTS.pop(entity_runtime_id, None); continue
                         entity_data = GAME_MONSTER_TEMPLATES.get(m_template_key)
