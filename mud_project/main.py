@@ -325,6 +325,7 @@ def send_room_description(player_object: player_class.Player):
 
 # In main.py - REPLACE your existing handle_connect with this:
 
+# In main.py - THIS IS THE CORRECT handle_connect FUNCTION
 @socketio.on('connect')
 def handle_connect(*args): # Accepts potential arguments from SocketIO
     sid = request.sid
@@ -355,13 +356,12 @@ def handle_connect(*args): # Accepts potential arguments from SocketIO
             print(f"DEBUG: Emitted initial game_messages to SID {sid}")
     except Exception as e_emit:
         print(f"ERROR: Failed to emit initial messages to SID {sid}. Error: {e_emit}")
-        # You might want to clean up the session or handle disconnect if this fails
         if sid in player_creation_sessions:
-            del player_creation_sessions[sid]
-    
-    # Ensure there is NO other code here, especially nothing trying to use
-    # command_input, parts_initial, verb_initial, or name_arg_initial.
-    # The function should end here after setting up the session and emitting.
+            del player_creation_sessions[sid] # Clean up session if emit failed
+
+    # THERE SHOULD BE NO OTHER CODE IN THIS FUNCTION.
+    # NO 'command_input', 'parts_initial', 'verb_initial', 'name_arg_initial'.
+    # NO 'if verb_initial == "create":' or similar logic.
 
 # --- handle_player_command function ---
 # (This is the function from the previous turn, ID: main_py_handle_command_update_v6)
@@ -906,12 +906,6 @@ def handle_player_command(data):
                     messages_to_client.extend(p_shell_optional.get_queued_messages())
                 if messages_to_client:
                     socketio.emit('game_messages', {'messages': messages_to_client}, room=s_id)
-
-            # --- Initial command handling: "login <name>" or "create <name>" ---
-            #if not player_shell and current_phase == "awaiting_login_name":
-            #    parts_initial = command_input.split(" ", 1)
-            #   verb_initial = parts_initial[0].lower()
-            #    name_arg_initial = parts_initial[1].strip().title() if len(parts_initial) > 1 and parts_initial[1].strip() else ""
 
                 if verb_initial == "create" and name_arg_initial:
                     min_len = getattr(config, 'MIN_CHAR_NAME_LENGTH', 3)
