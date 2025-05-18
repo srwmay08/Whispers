@@ -56,6 +56,25 @@ game_tick_counter = 0
 game_loop_active = True
 
 
+
+def broadcast_to_room(room_id, message_text, message_type="ambient_other_player", exclude_sids=None):
+    if exclude_sids is None:
+        exclude_sids = []
+    try:
+        # Attempt to convert room_id to int, as it's often stored as int in player.current_room_id
+        room_id_int = int(room_id)
+    except ValueError:
+        if config.DEBUG_MODE:
+            print(f"DEBUG BROADCAST_TO_ROOM: Invalid room_id format '{room_id}'. Cannot broadcast.")
+        return # Stop if room_id is not a valid integer or convertible to one
+
+    for sid_broadcast, player_obj_broadcast in active_players.items():
+        # Ensure player_obj_broadcast has current_room_id and it matches room_id_int
+        if hasattr(player_obj_broadcast, 'current_room_id') and \
+           player_obj_broadcast.current_room_id == room_id_int and \
+           sid_broadcast not in exclude_sids:
+            player_obj_broadcast.add_message(message_text, message_type)
+
 # --- game_tick_loop function ---
 # (This function was provided in the previous turn with ID: main_py_game_tick_loop_combat_ai)
 # Ensure that ENTITY_COMBAT_PARTICIPANTS is correctly used within it.
@@ -234,6 +253,96 @@ def game_tick_loop():
     if config.DEBUG_MODE: print(f"Game tick loop stopped at {datetime.datetime.now(local_tz).strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
 
+def finalize_character_creation(sid, player_shell: player_class.Player, game_races_data: dict, game_items_data: dict):
+    session = player_creation_sessions.get(sid)
+    if not player_shell:
+        if sid: # Ensure sid is valid before emitting
+            emit('game_messages', {'messages': [{"text": "Error: Character data lost during finalization.", "type": "error_critical"}]}, room=sid)
+        if session: # Clean up session if it still exists
+            player_creation_sessions.pop(sid, None)
+        print(f"ERROR FINALIZE: player_shell is None for SID {sid}.")
+        return
+
+    race_key = player_shell.race
+    race_data = game_races_data.get(race_key)
+
+    if race_data:
+        # Apply racial skill bonuses
+        if not hasattr(player_shell, 'skills'): # Should be initialized in Player class
+            player_shell.skills = getattr(config, 'INITIAL_SKILLS', {}).copy()
+        for skill, bonus in race_data.get("skill_bonuses", {}).items():
+            player_shell.skills[skill] = player_shell.skills.get(skill, 0) + bonus
+
+        # Apply racial bonus inventory
+        if not hasattr(player_shell, 'inventory'): # Should be initialized in Player class
+            player_shell.inventory = []
+        for item_key_inv in race_data.get("bonus_inventory", []):
+            if item_key_inv in game_items_data:
+                player_shell.inventory.append(item_key_inv)
+            elif config.DEBUG_MODE:
+                print(f"DEBUG FINALIZE: Bonus inventory item '{item_key_inv}' for race '{race_key}' not in GAME_ITEMS.")
+
+        # Determine starting room
+        start_zone_id_from_race = race_data.get("starting_zone_id")
+        default_start_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1)
+        final_start_room = default_start_room_id
+
+        if start_zone_id_from_race is not None:
+            try:
+                start_zone_id_int = int(start_zone_id_from_race)
+                if start_zone_id_int in GAME_ROOMS: # Check against loaded game rooms
+                    final_start_room = start_zone_id_int
+                else:
+                    player_shell.add_message(f"Race starting area ID '{start_zone_id_from_race}' unknown; using default room {default_start_room_id}.", "system_warning")
+            except ValueError:
+                player_shell.add_message(f"Race starting area ID '{start_zone_id_from_race}' is not a valid number; using default room {default_start_room_id}.", "system_warning")
+        player_shell.current_room_id = final_start_room
+    else: # No race data found, critical issue or race not set on player_shell
+        player_shell.add_message(f"Error: Race data for '{race_key}' not found. Using default start room.", "error_critical")
+        player_shell.current_room_id = getattr(config, 'DEFAULT_START_ROOM_ID', 1)
+
+    # Calculate derived stats (Max HP/MP/SP etc.) AFTER race is set and stats might be modified
+    if hasattr(player_shell, 'calculate_derived_stats'):
+        player_shell.calculate_derived_stats(game_races_data, game_items_data) # Pass game_items_data
+
+    # Set current HP/MP/SP to their new maximums
+    player_shell.hp = getattr(player_shell, 'max_hp', 10)
+    player_shell.mp = getattr(player_shell, 'max_mp', 0)
+    player_shell.sp = getattr(player_shell, 'max_sp', 0)
+
+    # Calculate training points
+    if hasattr(player_shell, 'calculate_training_points'):
+        player_shell.calculate_training_points(game_races_data)
+
+    player_shell.creation_phase = None # Mark creation as fully complete on the player object
+
+    if player_handler.save_player(player_shell):
+        active_players[sid] = player_shell # Add to active players
+        if session: # Clean up the creation session
+            player_creation_sessions.pop(sid, None)
+
+        player_shell.add_message(f"Character {player_shell.name} created successfully!", "event_highlight")
+        broadcast_to_room(player_shell.current_room_id, f"{player_shell.name} appears.", "ambient_player_arrival", exclude_sids=[sid])
+        send_room_description(player_shell) # Send initial room description
+
+        # Send all queued messages for the player, then stats
+        final_messages = player_shell.get_queued_messages()
+        if final_messages:
+            emit('game_messages', {'messages': final_messages}, room=sid)
+        send_player_stats_update(player_shell)
+        if config.DEBUG_MODE:
+            print(f"DEBUG FINALIZE: Character '{player_shell.name}' (SID: {sid}) finalized and added to active_players.")
+    else: # Failed to save
+        error_msg = "A critical error occurred saving your character after creation."
+        player_shell.add_message(error_msg, "error_critical")
+        # Still send messages even if save failed, so user sees the error
+        error_messages_on_save_fail = player_shell.get_queued_messages()
+        if error_messages_on_save_fail:
+             emit('game_messages', {'messages': error_messages_on_save_fail}, room=sid)
+        # Do not remove from player_creation_sessions here, as they might need to try again or be disconnected
+        print(f"ERROR FINALIZE: Failed to save player '{player_shell.name}' (SID: {sid}).")
+
+
 # --- send_room_description function ---
 # (This function was provided in the previous turn with ID: main_py_send_room_description_monster_display)
 # Ensure it's correctly implemented to avoid monster numbering.
@@ -322,6 +431,8 @@ def send_room_description(player_object: player_class.Player):
         "type": "room_data_update"
     }
     player_object.add_message(room_data_payload)
+
+
 
 # In main.py - REPLACE your existing handle_connect with this:
 
