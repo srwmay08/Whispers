@@ -58,26 +58,6 @@ PORT = 8024
 SECRET_KEY = 'your_very_secret_key_here!' # IMPORTANT: Change this for production
 SOCKETIO_ASYNC_MODE = None # Let SocketIO choose, or specify 'threading', 'eventlet', 'gevent'
 
-# --- DEBUGGING GRANULARITY ---
-DEBUG_MODE = True  # Master debug switch
-DEBUG_RESPAWN_VERBOSE = False  # Set to True for very detailed respawn attempt logs
-DEBUG_GAME_TICK_RESPAWN_PHASE = False # Show the "RESPAWN_PHASE: Checking..." message
-SEND_CLIENT_TICK_MARKERS = True # Send ">" to client for XP absorption or other tick events
-DEBUG_COMBAT_ROLLS = True
-
-DEFAULT_STAT_VALUE = 10
-
-# --- CREATION & RESPAWN
-MIN_CHAR_NAME_LENGTH = 3
-MAX_CHAR_NAME_LENGTH = 32
-
-DEFAULT_START_ROOM_ID = 1
-PLAYER_RESPAWN_ROOM_ID = 1
-PVP_ENABLED_ROOM_TAG = True
-
-
-MAX_INVENTORY_SIZE = 20
-
 # --- DATABASE CONFIGURATION ---
 MONGODB_URI = "mongodb://localhost:27017/"
 DATABASE_NAME = "whispers_game" # Use a new DB name for the refactored structure
@@ -90,14 +70,45 @@ LOOT_TABLES_COLLECTION = "loot_tables"
 RACES_COLLECTION = "races"
 EQUIPMENT_TABLES_COLLECTION = "equipment_tables"
 
+# --- DEBUGGING GRANULARITY ---
+DEBUG_MODE = True
+DEBUG_RESPAWN_VERBOSE = False
+DEBUG_GAME_TICK_RESPAWN_PHASE = False
+SEND_CLIENT_TICK_MARKERS = True
+DEBUG_COMBAT_ROLLS = True
+DEBUG_AI_AGGRO = True # New flag for AI aggression logging
+
+
 # --- GAME TICK INTERVALS
 TICK_INTERVAL_SECONDS = 6  # Seconds per game tick
 MONSTER_ROAM_TICK_INTERVAL = 5 # How many game ticks before attempting monster roams
 MONSTER_RESPAWN_TICK_INTERVAL = 1 # How many game ticks before checking respawns
+AI_AGGRESSION_CHECK_INTERVAL_TICKS = 1 # How many game ticks before AI checks for new targets
+
+# --- CREATION & RESPAWN ---
+MIN_CHAR_NAME_LENGTH = 3
+MAX_CHAR_NAME_LENGTH = 32
+DEFAULT_START_ROOM_ID = 1
+PLAYER_DEATH_ROOM_ID = 1 # Room player goes to on PvP death (or PvE if implemented)
+PLAYER_RESPAWN_ROOM_ID = 1 # For general respawn/relog if no other location
+PVP_ENABLED_ROOM_TAG = True # If a room has "pvp": true, PvP is allowed
+MAX_INVENTORY_SIZE = 20
+DEFAULT_STAT_VALUE = 10
 
 # --- ENVIRONMENT SIMULATION (for testing, can be longer for production) ---
 TIME_CHANGE_INTERVAL_TICKS = 20      # How many game ticks before time of day might change (e.g., 20 ticks * 6s/tick = 2 minutes)
 WEATHER_CHANGE_INTERVAL_TICKS = 15   # How many game ticks before weather might change (e.g., 15 ticks * 6s/tick = 1.5 minutes) - Made more frequent for testing
+
+# --- WEATHER ---
+WEATHER_SEVERITY_ORDER = ["clear", "light clouds", "overcast", "light rain", "rain", "heavy rain", "storm"]
+
+WEATHER_STAY_CLEAR_BASE_CHANCE = 0.65       # Base chance to remain clear
+WEATHER_WORSEN_FROM_CLEAR_START_CHANCE = 0.10 # Initial chance to worsen from clear
+WEATHER_WORSEN_ESCALATION = 0.03            # Increase worsen chance by this amount each time it stays clear
+WEATHER_MAX_WORSEN_FROM_CLEAR_CHANCE = 0.75 # Cap for worsening chance from clear
+
+WEATHER_IMPROVE_BASE_CHANCE = 0.50          # Base chance for bad weather to improve by one step
+WEATHER_STAY_SAME_BAD_CHANCE = 0.40         # Base chance for bad weather to stay the same
 
 # --- TIME OF DAY CONFIGURATION ---
 SECONDS_PER_GAME_MINUTE = 10  # Real-time seconds for one game minute
@@ -119,65 +130,33 @@ TIME_OF_DAY_PHASES = [
     (DAY_DURATION_SECONDS + int(NIGHT_DURATION_SECONDS * 0.75), "LATE_NIGHT", "The night wears on, and a pre-dawn chill settles upon the land.") # 75% into night
 ]
 
-# --- WEATHER SYSTEM PARAMETERS ---
-# Order from best (index 0) to worst
-WEATHER_SEVERITY_ORDER = [
-    "clear", 
-    "light clouds", 
-    "overcast", 
-    "light rain", # Or "drizzle", "light snow"
-    "rain",       # Or "snow"
-    "heavy rain", # Or "heavy snow"
-    "storm",      # Or "blizzard"
-]
-WEATHER_STAY_CLEAR_BASE_CHANCE = 0.65       # Base chance to remain clear
-WEATHER_WORSEN_FROM_CLEAR_START_CHANCE = 0.10 # Initial chance to worsen from clear
-WEATHER_WORSEN_ESCALATION = 0.03            # Increase worsen chance by this amount each time it stays clear
-WEATHER_MAX_WORSEN_FROM_CLEAR_CHANCE = 0.75 # Cap for worsening chance from clear
-
-WEATHER_IMPROVE_BASE_CHANCE = 0.50          # Base chance for bad weather to improve by one step
-WEATHER_STAY_SAME_BAD_CHANCE = 0.40         # Base chance for bad weather to stay the same
-# Implicitly, 1.0 - IMPROVE_BASE_CHANCE - STAY_SAME_BAD_CHANCE is the chance to worsen further if not already at max severity.
-
-
-# --- EXPERIENCE 
-XP_ABSORPTION_INTERVAL_SECONDS = 30 # Seconds per XP absorption
-XP_ABSORPTION_TICKS = max(1, round(XP_ABSORPTION_INTERVAL_SECONDS / TICK_INTERVAL_SECONDS))
-
-# --- EXPERIENCE THRESHOLDS
-XP_LEVEL_THRESHOLDS = {
-    # Level: XP to reach this level (total accumulated)
-    # Or, Level: XP needed to get FROM previous level TO this level
-    # Be consistent with how your main.py's level up check uses it.
-    # The main.py example used: XP_LEVEL_THRESHOLDS.get(player_obj_process.level + 1, ...)
-    # This implies the key is the *next level* and value is XP needed to *reach* it.
-    # Example:
-    2: 100,     # XP to reach level 2
-    3: 300,     # XP to reach level 3 (i.e., 200 more after level 2)
-    4: 600,
-    5: 1000,
-    # ... and so on
-}
-
+# --- EXPERIENCE ---
+XP_ABSORPTION_TICKS = max(1, round(30 / TICK_INTERVAL_SECONDS)) # Approx 30 real seconds
+XP_LEVEL_THRESHOLDS = {2: 100, 3: 300, 4: 600, 5: 1000}
 MIND_STATUS_THRESHOLDS = [
-    {"threshold": 1.01, "phrase": "Completely saturated"}, # Covers > 1.0
-    {"threshold": 0.90, "phrase": "Must rest"},
-    {"threshold": 0.75, "phrase": "Numbed"},
-    {"threshold": 0.62, "phrase": "Becoming numbed"},
-    {"threshold": 0.50, "phrase": "Muddled"},
-    {"threshold": 0.25, "phrase": "Clear"},
-    {"threshold": 0.00, "phrase": "Fresh and clear"}, # For > 0.0 up to 0.25
-    {"threshold": -0.01, "phrase": "Clear as a bell"} # For exactly 0.0 (special case)
+    {"threshold": 1.01, "phrase": "Completely saturated"}, {"threshold": 0.90, "phrase": "Must rest"},
+    {"threshold": 0.75, "phrase": "Numbed"}, {"threshold": 0.62, "phrase": "Becoming numbed"},
+    {"threshold": 0.50, "phrase": "Muddled"}, {"threshold": 0.25, "phrase": "Clear"},
+    {"threshold": 0.00, "phrase": "Fresh and clear"}, {"threshold": -0.01, "phrase": "Clear as a bell"}
 ]
+MIN_XP_ABSORBED_PER_EVENT = 1
+BASE_FIELD_XP_POOL_CAPACITY = 1000
+FIELD_XP_POOL_LOGIC_BONUS_MULTIPLIER = 50
+XP_ABSORB_LOGIC_BONUS_DIVISOR_NODE_TOWN = 5
+XP_ABSORB_LOGIC_BONUS_DIVISOR_OTHER = 7
+XP_ABSORB_POOL_SIZE_BONUS_PER_XP_AMOUNT = 200
+XP_ABSORB_POOL_SIZE_BONUS_POINT = 1
+XP_ABSORB_POOL_SIZE_BONUS_MAX_POINTS = 10
+XP_ABSORB_SUPER_NODE_BONUS = 2
+XP_ABSORB_GROUP_BONUS = 1
+XP_ABSORB_BASE_RATE_ON_NODE = 25
+XP_ABSORB_BASE_RATE_IN_TOWN_OFF_NODE = 22
+XP_ABSORB_BASE_RATE_OTHER_AREAS = 19
 
 
-
-# --- SEARCH ROUND TIME
-SEARCH_BASE_ROUNDTIME = 1.5
-SEARCH_MAX_ROUNDTIME_SECONDS = 5.0
-SEARCH_MIN_ROUNDTIME_SECONDS = 0.5
+# --- ROUND TIME DEFAULTS ---
+ROUNDTIME_DEFAULTS = {"roundtime_look": 0.2, "roundtime_move": 0.5, "roundtime_attack": 3.0, "roundtime_action_short": 1.0}
 STAT_FOR_SEARCH_TIME_REDUCTION = "perception" # The name of the stat in player.stats
-SEARCH_PERCEPTION_REDUCTION_PER_10POINTS = 0.5 # Seconds saved per 10 points of the stat
 
 # --- Loot Config ---
 NPC_DROP_CARRIED_CHANCE = 1.0  # 0.0 to 1.0
@@ -185,10 +164,35 @@ NPC_DROP_EQUIPPED_CHANCE = 0.8 # 0.0 to 1.0 (e.g., 80% chance for each equipped 
 CORPSE_DECAY_TIME_SECONDS = 300 # (You likely have this)
 CORPSE_DECAY_TICK_INTERVAL = 10 # How many game ticks before checking corpse decay (adjust as needed)
 
-# --- FACTION ---
+# --- COMBAT ---
+COMBAT_ADVANTAGE_FACTOR = 40
+COMBAT_HIT_THRESHOLD = 0 # Gemstone used 100, but your formula adds AvD and d100 to (AS-DS)
+COMBAT_DAMAGE_MODIFIER_DIVISOR = 10
+DEFAULT_UNARMORED_TYPE = "unarmored"
+ARMOR_TYPES = [DEFAULT_UNARMORED_TYPE, "cloth", "leather", "scale", "chain", "plate"]
+BAREHANDED_FLAT_DAMAGE = 1 # Flat damage for barehanded attacks
+
+# --- FACTION & AI ---
 MAX_FACTION_STANDING = 25000
 MIN_FACTION_STANDING = -25000
+NPC_DEFAULT_FACTION_HOSTILITY_THRESHOLD = -750 # Player CONSIDER below this with NPC's FACTION = hostile
+# Disposition levels for AI behavior
+DISPOSITION_PASSIVE = "passive"
+DISPOSITION_NEUTRAL = "neutral"
+DISPOSITION_THREATENING = "threatening"
+DISPOSITION_AGGRESSIVE = "aggressive"
+DISPOSITION_HOSTILE_GENERAL = "hostile" # General hostility, may attack on sight or with triggers
+THREATENING_DELAY_TICKS = 3 # Number of game ticks a "threatening" entity waits before attacking
 
+FACTION_DISPLAY_NAMES = {
+    "OakhavenCivilian": "Oakhaven Civilians",
+    "GreenSkinMarauders": "Greenskin Marauders",
+    "ScaleScourgeClan": "Scalescourge Clan",
+    "Vermin": "Vermin",
+    "IndependentMerchants": "Independent Merchants",
+    "OakhavenLeadership": "Oakhaven Leadership",
+    # Add other faction IDs and their display names
+}
 
 
 
