@@ -323,12 +323,15 @@ def send_room_description(player_object: player_class.Player):
     }
     player_object.add_message(room_data_payload)
 
+# In main.py - REPLACE your existing handle_connect with this:
+
 @socketio.on('connect')
 def handle_connect(*args): # Accepts potential arguments from SocketIO
     sid = request.sid
     if config.DEBUG_MODE:
         print(f"DEBUG: Client connected: SID {sid}")
-        if args and args[0] is not None : # Check if any actual auth data was passed
+        # This will show if Flask-SocketIO is passing any unexpected arguments
+        if args and any(arg is not None for arg in args): # Check if any actual data was passed
             print(f"DEBUG: handle_connect received args: {args}")
 
     # Initialize session for character creation/login prompt phase
@@ -340,8 +343,6 @@ def handle_connect(*args): # Accepts potential arguments from SocketIO
     }
 
     # Send initial prompts to the client
-    # It's good practice to wrap emits in try-except if there's any doubt,
-    # but for this initial emit, it's usually straightforward.
     try:
         emit('game_messages', {
             'messages': [
@@ -353,16 +354,14 @@ def handle_connect(*args): # Accepts potential arguments from SocketIO
         if config.DEBUG_MODE:
             print(f"DEBUG: Emitted initial game_messages to SID {sid}")
     except Exception as e_emit:
-        # Log if emit fails, though this is rare if the connection is established
         print(f"ERROR: Failed to emit initial messages to SID {sid}. Error: {e_emit}")
-        # Optionally, you might want to clean up player_creation_sessions[sid] here
-        # or handle the disconnect more explicitly if the client can't receive crucial info.
-
-    # NO command_input parsing here.
-    # NO parts_initial, verb_initial, name_arg_initial here.
-    # NO logic checking for "create" or "login" verbs here.
-    # Any try-except blocks here should only reference variables available in this scope (e.g., sid).
-
+        # You might want to clean up the session or handle disconnect if this fails
+        if sid in player_creation_sessions:
+            del player_creation_sessions[sid]
+    
+    # Ensure there is NO other code here, especially nothing trying to use
+    # command_input, parts_initial, verb_initial, or name_arg_initial.
+    # The function should end here after setting up the session and emitting.
 
 # --- handle_player_command function ---
 # (This is the function from the previous turn, ID: main_py_handle_command_update_v6)
@@ -909,10 +908,10 @@ def handle_player_command(data):
                     socketio.emit('game_messages', {'messages': messages_to_client}, room=s_id)
 
             # --- Initial command handling: "login <name>" or "create <name>" ---
-            if not player_shell and current_phase == "awaiting_login_name":
-                parts_initial = command_input.split(" ", 1)
-                verb_initial = parts_initial[0].lower()
-                name_arg_initial = parts_initial[1].strip().title() if len(parts_initial) > 1 and parts_initial[1].strip() else ""
+            #if not player_shell and current_phase == "awaiting_login_name":
+            #    parts_initial = command_input.split(" ", 1)
+            #   verb_initial = parts_initial[0].lower()
+            #    name_arg_initial = parts_initial[1].strip().title() if len(parts_initial) > 1 and parts_initial[1].strip() else ""
 
                 if verb_initial == "create" and name_arg_initial:
                     min_len = getattr(config, 'MIN_CHAR_NAME_LENGTH', 3)
@@ -958,7 +957,7 @@ def handle_player_command(data):
                 send_creation_messages(sid, session, player_shell) # Send any accumulated messages
 
             # --- Subsequent character creation input handling ---
-            elif player_shell: # player_shell exists, so creation is in progress
+        elif player_shell: # player_shell exists, so creation is in progress
                 # Pass GAME_RACES to character_creation.handle_creation_input
                 character_creation.handle_creation_input(player_shell, command_input, player_handler, GAME_RACES)
                 if session.get("phase") != player_shell.creation_phase: # Update session phase if changed by handler
@@ -974,7 +973,7 @@ def handle_player_command(data):
                 send_creation_messages(sid, session, player_shell) # Send updates from this step
 
             # --- Error case for session state ---
-            elif not player_shell and current_phase != "awaiting_login_name":
+        elif not player_shell and current_phase != "awaiting_login_name":
                  # This means session exists but player_shell is gone, and not at the first step.
                  # Could indicate an internal error.
                  session["messages_queue"].append({"text": "Your connection wavers. Reconnecting might help.", "type": "error_critical", "prompt":True})
