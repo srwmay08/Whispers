@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <title>Whispers in the Dark - Client</title>
     <style>
-        /* ... (your existing CSS from index_html_v4_spacing_fix) ... */
         html, body {
             height: 100%; margin: 0; padding: 0;
             font-family: 'Courier New', Courier, monospace;
@@ -24,57 +23,56 @@
         }
         #input-area { 
             display: flex; 
-            flex-direction: column; /* Stack input and RT bar */
+            flex-direction: column;
             padding: 10px; 
             background-color: #1a1a1a; 
             flex-shrink: 0; 
         }
-        #command-input-wrapper {
-            display: flex; /* For input and button */
-            width: 100%;
-        }
-        #input { /* Renamed from command-input for clarity */
+        #command-input-wrapper { display: flex; width: 100%; }
+        #input {
             flex-grow: 1; background-color: #222; color: #ddd;
             border: 1px solid #444; padding: 8px;
             font-family: inherit; font-size: 1em;
         }
-        #send-button { /* Added a send button for consistency if needed */
+        #send-button {
             background-color: #030; color: #0f0;
             border: 1px solid #070; padding: 8px 15px;
             margin-left: 10px; cursor: pointer;
         }
         #send-button:hover { background-color: #050; }
 
-        .message-prefix {
-            color: #888; 
-            font-style: normal;  
-            font-weight: normal; 
-            margin-right: 0.5ch; 
-        }
-        /* Message Type Styling examples */
+        .message-prefix { color: #888; margin-right: 0.5ch; }
+        /* General Message Types */
         .message-echo {} 
         .message-error, .message-error_rt, .message-error_critical, .message-error_pvp, .message-error_move, .message-error_dev { color: #ff6b6b; font-weight: bold; }
-        .message-feedback, .message-feedback_move, .message-feedback_neutral, .message-feedback_get_item, .message-feedback_search_corpse, .message-feedback_search_empty, .message-feedback_look_target, .message-feedback_read  { color: #8fbc8f; } 
+        .message-feedback, .message-feedback_move, .message-feedback_neutral, .message-feedback_get_item, .message-feedback_search_corpse, .message-feedback_search_empty, .message-feedback_look_target, .message-feedback_read, .message-feedback_equip, .message-feedback_unequip  { color: #8fbc8f; } 
         .message-event_highlight, .message-system_highlight, .message-level_up_major, .message-event_pvp_victory, .message-event_pvp_defeat_major, .message-event_defeat_corpse, .message-event_defeat, .message-event_defeat_major  { color: #ffd700; font-weight: bold; } 
         .message-system, .message-prompt, .message-system_warning, .message-system_info, .message-system_info_block { color: #add8e6; } 
         .message-stat_increase { color: #40e0d0; } 
         .message-speech_player, .message-dialogue_self { color: #87cefa; font-style: italic; } 
         .message-speech_other, .message-dialogue_other { color: #dda0dd; font-style: italic; } 
-        .message-ambient_npc, .message-ambient_monster, .message-ambient_other_player, .message-ambient_player_arrival, .message-ambient_player_departure, .message-ambient_combat, .message-ambient_pvp_defeat, .message-ambient_neutral, .message-ambient_spawn, .message-ambient_time, .message-ambient_weather { color: #a9a9a9; font-style: italic; }  
+        .message-ambient_npc, .message-ambient_monster, .message-ambient_other_player, .message-ambient_player_arrival, .message-ambient_player_departure, .message-ambient_combat, .message-ambient_pvp, .message-ambient_pvp_defeat, .message-ambient_neutral, .message-ambient_spawn, .message-ambient_time, .message-ambient_weather, .message-ambient_warning, .message-ambient_defeat { color: #a9a9a9; font-style: italic; }  
         .message-event_monster_arrival { color: #ff7f50; font-weight: bold; font-style: italic;} 
         .message-system_tick_marker { color: #666; } 
-        .message-xp_gain, .message-xp_absorb, .message-xp_pool_full, .message-mind_status { color: #b8860b; } /* DarkGoldenRod for XP/Mind */
-        .message-faction_update_positive { color: #32cd32; } /* LimeGreen */
-        .message-faction_update_negative { color: #ff4500; } /* OrangeRed */
-        .message-combat_action_player, .message-combat_hit_player, .message-combat_miss_player, .message-combat_defeat_player, .message-combat_status_target  { color: #ffaf7a; } /* Light Orange/Peach for player combat actions */
-        .message-combat_roll_info_debug { color: #777; font-style: italic; font-size: 0.9em; } /* Greyed out for debug */
-        .message-feedback_loot_drop { color: #4caf50; font-style: italic; } /* Green for loot drops */
-        .message-header_info_block { color: #f0e68c; font-weight: bold; text-decoration: underline;} /* Khaki, bold, underline */
-        .message-info_block_content { color: #e0e0e0; padding-left: 1ch;} /* Light grey, slight indent */
-
+        .message-xp_gain, .message-xp_absorb, .message-xp_pool_full, .message-mind_status { color: #b8860b; }
+        .message-faction_update_positive { color: #32cd32; }
+        .message-faction_update_negative { color: #ff4500; }
+        .message-header_info_block { color: #f0e68c; font-weight: bold; text-decoration: underline;}
+        .message-info_block_content { color: #e0e0e0; padding-left: 1ch;}
         
+        /* Combat Specific Message Types */
+        .message-combat_action_player { color: #ffaf7a; } /* Player initiating an attack */
+        .message-combat_action_opponent { color: #ff8c69; } /* Opponent initiating an attack on player */
+        .message-combat_hit_player { color: #ffc09f; font-weight: bold; } /* Player's successful hit */
+        .message-combat_miss_player { color: #ffc09f; } /* Player's miss */
+        .message-combat_hit_by_opponent { color: #ff7f7f; font-weight: bold; } /* Player hit by opponent */
+        .message-combat_miss_by_opponent { color: #ff7f7f; } /* Opponent misses player */
+        .message-combat_defeat_player { color: #ffd700; font-weight: bold; } /* Player defeats target */
+        .message-combat_status_target { color: #d3a15f; font-style: italic; } /* Target status after player hit */
+        .message-combat_roll_details { color: #9dbcd4; padding-left: 2ch; font-size: 0.9em; } /* NEW: For AS/DS roll string */
+        .message-feedback_loot_drop { color: #4caf50; font-style: italic; }
+
         /* Room info specific styling */
-        .room-info-container { margin-bottom: 10px; } 
         .message-room_name_line { color: #00ffff; font-weight: bold; } 
         .message-room_description { color: #f0f8ff; margin-top: 0px; padding-left: 2ch; } 
         .message-room_presence_line { color: #e6e6fa; font-style: italic; } 
@@ -99,15 +97,14 @@
 </head><body>
     <div id="game-window">
         <div class="stats-display" id="stats-area">
-            Name: - | Lvl: - | XP: -/- (Pool: -)<br>HP: -/- | MP: -/- | SP: -/- | Gold: -<br>RT: -
+            Name: - | Lvl: - | XP: -/- (Pool: -)<br>HP: -/- | MP: -/- | SP: -/- | Gold: -<br>Mind: -
         </div>
         <div id="output"></div>
         <div id="input-area">
-            <div id="rt-bar-container">
-                </div>
+            <div id="rt-bar-container"></div>
             <div id="command-input-wrapper">
                 <input type="text" id="input" placeholder="Enter command..." autofocus>
-                </div>
+            </div>
         </div>
     </div>
 
@@ -134,52 +131,46 @@
             }
         }
 
-        function createPrefixedMessageLine(text, type) {
+        function createMessageElement(text, type) {
             const lineDiv = document.createElement('div');
-            lineDiv.className = 'prefixed-line message-' + type; 
-            const prefixSpan = document.createElement('span');
-            prefixSpan.className = 'message-prefix';
-            if (type === 'room_description' && text.startsWith('[')) { 
-                 // No prefix for room name line itself
-            } else if (type.startsWith('room_') && (type !== 'room_name_line' && type !== 'room_description')) {
-                 // No prefix for other parts of room description
-            } else if (type === 'room_name_line') {
-                // No prefix for the room name itself.
-            }
-            else {
+            lineDiv.className = 'message-' + type; // Apply class for styling
+
+            // Special handling for types that should not have a prefix or need specific formatting
+            if (type === 'room_name_line' || 
+                (type.startsWith('room_') && type !== 'room_presence_line' && type !== 'room_items_line' && type !== 'room_exits_line') ||
+                type === 'combat_roll_details' || // NEW: No prefix for roll details
+                (type === 'system_tick_marker' && text === '>') 
+                ) {
+                // No prefix for these types
+                if (type === 'combat_roll_details') {
+                     lineDiv.style.paddingLeft = '2ch'; // Indent roll details
+                     lineDiv.style.fontSize = '0.9em'; // Slightly smaller font for roll details
+                }
+            } else if (type !== 'echo') { // Add prefix for most other types, but not echo
+                const prefixSpan = document.createElement('span');
+                prefixSpan.className = 'message-prefix';
                 prefixSpan.textContent = '>'; 
                 lineDiv.appendChild(prefixSpan);
             }
-            const textNode = document.createTextNode(text); 
-            lineDiv.appendChild(textNode);
+            
+            // Handle echo specifically to remove server-side "> " if present
+            if (type === 'echo') {
+                const prefixSpan = document.createElement('span');
+                prefixSpan.className = 'message-prefix';
+                prefixSpan.textContent = '>';
+                lineDiv.appendChild(prefixSpan);
+                lineDiv.appendChild(document.createTextNode(String(text).startsWith("> ") ? String(text).substring(2) : String(text)));
+            } else {
+                 lineDiv.appendChild(document.createTextNode(text));
+            }
             return lineDiv;
         }
+
 
         function addMessage(text, type = 'normal') {
             const messageText = (text === null || text === undefined) ? String(text) : text;
 
-            if (type === 'echo') { 
-                const messageDiv = document.createElement('div');
-                messageDiv.className = 'message-' + type;
-                const prefixSpan = document.createElement('span');
-                prefixSpan.className = 'message-prefix';
-                prefixSpan.textContent = '>';
-                messageDiv.appendChild(prefixSpan);
-                messageDiv.appendChild(document.createTextNode(String(messageText).startsWith("> ") ? String(messageText).substring(2) : String(messageText))); 
-                appendOutput(messageDiv);
-                return;
-            }
-             if (type === 'system_tick_marker' && messageText === '>') { 
-                const messageDiv = document.createElement('div');
-                messageDiv.className = 'message-' + type; 
-                const prefixSpan = document.createElement('span');
-                prefixSpan.className = 'message-prefix'; 
-                prefixSpan.textContent = '>'; 
-                messageDiv.appendChild(prefixSpan);
-                appendOutput(messageDiv);
-                return;
-            }
-
+            // Handle round time bar for error_rt messages
             if (type === 'error_rt' && messageText.toLowerCase().startsWith('wait')) {
                 const waitTimeMatch = messageText.match(/wait\s*([\d.]+)\s*s/i);
                 if (waitTimeMatch && waitTimeMatch[1]) {
@@ -190,14 +181,7 @@
             
             const lines = String(messageText).split('\n'); 
             lines.forEach(line => {
-                if (type.startsWith('room_')) {
-                    const lineDiv = document.createElement('div');
-                    lineDiv.className = 'message-' + type;
-                    lineDiv.textContent = line;
-                    appendOutput(lineDiv);
-                } else {
-                    appendOutput(createPrefixedMessageLine(line, type));
-                }
+                appendOutput(createMessageElement(line, type));
             });
         }
         
@@ -207,139 +191,75 @@
                 addMessage("Error: Received invalid room data from server.", "error_critical");
                 return;
             }
-            const roomNameDiv = document.createElement('div');
-            roomNameDiv.className = 'message-room_name_line';
-            roomNameDiv.textContent = `[${roomData.name || 'Unknown Room'}]`;
-            appendOutput(roomNameDiv);
-
-            const descDiv = document.createElement('div');
-            descDiv.className = 'message-room_description';
-            descDiv.textContent = roomData.description || 'No description available.';
-            appendOutput(descDiv);
-            
+            // Room Name
+            appendOutput(createMessageElement(`[${roomData.name || 'Unknown Room'}]`, 'room_name_line'));
+            // Room Description
+            appendOutput(createMessageElement(roomData.description || 'No description available.', 'room_description'));
+            // Presence Summary
             if (roomData.presence_summary && roomData.presence_summary.length > 0) { 
-                const presenceDiv = document.createElement('div');
-                presenceDiv.className = 'message-room_presence_line';
-                presenceDiv.textContent = roomData.presence_summary;
-                appendOutput(presenceDiv);
+                appendOutput(createMessageElement(roomData.presence_summary, 'room_presence_line'));
             }
-            
-            // --- CHANGE: Removed the user's added debugging block that caused duplication ---
-            // The console.log lines related to items_summary can also be removed if no longer needed for your debugging.
-            // console.log("CLIENT DEBUG: Raw items_summary from roomData:", roomData.items_summary);
-            // let shouldDisplayItems = false; 
-            // if (roomData.items_summary) { 
-            //     console.log("CLIENT DEBUG: items_summary exists. Length:", roomData.items_summary.length);
-            //     if (roomData.items_summary.length > 0) {
-            //         shouldDisplayItems = true;
-            //     }
-            // }
-            // console.log("CLIENT DEBUG: Condition to display items_summary (shouldDisplayItems):", shouldDisplayItems);
-
-            // if (shouldDisplayItems) { // THIS BLOCK WAS THE CULPRIT FOR DUPLICATION
-            //     console.log("CLIENT DEBUG: ATTEMPTING TO APPEND items_summary line:", roomData.items_summary);
-            //     appendOutput(createPrefixedMessageLine(roomData.items_summary, 'room_items_line')); 
-            // } else if (roomData.items_summary === "") { 
-            //     console.log("CLIENT DEBUG: items_summary is an empty string. Not displaying 'YOU ALSO SEE'.");
-            // } else {
-            //     console.log("CLIENT DEBUG: items_summary is falsy or length 0. Not displaying 'YOU ALSO SEE'. Value:", roomData.items_summary);
-            // }
-            // --- END CHANGE ---
-
-            // This is the original, correct block for displaying items_summary
+            // Items Summary
             if (roomData.items_summary && roomData.items_summary.length > 0 && roomData.items_summary.trim() !== "YOU ALSO SEE: (nothing)") {
-                 const itemsDiv = document.createElement('div');
-                 itemsDiv.className = 'message-room_items_line';
-                 itemsDiv.textContent = roomData.items_summary; 
-                 appendOutput(itemsDiv);
+                 appendOutput(createMessageElement(roomData.items_summary, 'room_items_line'));
             }
-
-            const exitsDiv = document.createElement('div');
-            exitsDiv.className = 'message-room_exits_line';
-            exitsDiv.textContent = `OBVIOUS EXITS: ${roomData.exits || 'None'}`;
-            appendOutput(exitsDiv);
+            // Exits
+            appendOutput(createMessageElement(`OBVIOUS EXITS: ${roomData.exits || 'None'}`, 'room_exits_line'));
         }
 
         function displayRaceOptions(racePayload) { 
             if (!racePayload || typeof racePayload !== 'object') {
                 console.error("CLIENT: displayRaceOptions called with invalid data:", racePayload);
-                addMessage("Error: Received invalid race data from server.", "error_critical");
-                return;
+                addMessage("Error: Received invalid race data from server.", "error_critical"); return;
             }
-            if (racePayload.prompt_text) {
-                 addMessage(racePayload.prompt_text, 'prompt'); 
-            }
+            if (racePayload.prompt_text) addMessage(racePayload.prompt_text, 'prompt'); 
             if (racePayload.races && Array.isArray(racePayload.races)) {
                 addMessage("--- Available Heritages ---", "system_highlight");
                 racePayload.races.forEach(race => {
                     addMessage(`${race.name.toUpperCase()} (Type: ${race.key})`, 'system_highlight');
                     addMessage(`  ${race.description}`, 'info'); 
                     if (race.stat_modifiers_display && typeof race.stat_modifiers_display === 'object' && Object.keys(race.stat_modifiers_display).length > 0) {
-                        let modifiersStr = Object.entries(race.stat_modifiers_display)
-                            .map(([stat, val_str]) => `${stat.toUpperCase()} ${val_str}`) 
-                            .join(', ');
+                        let modifiersStr = Object.entries(race.stat_modifiers_display).map(([stat, val_str]) => `${stat.toUpperCase()} ${val_str}`).join(', ');
                         addMessage(`  Stat Modifiers: ${modifiersStr}`, 'feedback');
                     }
-                    if (race.notes) { 
-                        addMessage(`  "${race.notes}"`, 'narrative_emotive');
-                    }
-                    const spacer = document.createElement('div'); 
-                    spacer.innerHTML = '&nbsp;'; 
-                    appendOutput(spacer); 
+                    if (race.notes) addMessage(`  "${race.notes}"`, 'narrative_emotive');
+                    appendOutput(createMessageElement('&nbsp;', 'system_info')); // Spacer
                 });
                 addMessage("---------------------------", "system_highlight");
-            } else {
-                addMessage("No race options available at this time.", "system_info");
-            }
+            } else { addMessage("No race options available.", "system_info"); }
         }
 
         function startRoundTimeBar(durationSeconds) {
-            if (rtIntervalId) {
-                clearInterval(rtIntervalId); 
-            }
-            rtBarContainer.innerHTML = ''; 
-            rtBarContainer.classList.add('active');
+            if (rtIntervalId) clearInterval(rtIntervalId); 
+            rtBarContainer.innerHTML = ''; rtBarContainer.classList.add('active');
             commandInput.disabled = true; 
-
             const totalTicks = Math.max(1, Math.ceil(durationSeconds * 5)); 
             const tickDurationMs = (durationSeconds * 1000) / totalTicks;
-            
             for (let i = 0; i < totalTicks; i++) {
                 const tickElement = document.createElement('div');
-                tickElement.className = 'rt-tick';
-                tickElement.style.width = `${100 / totalTicks}%`; 
+                tickElement.className = 'rt-tick'; tickElement.style.width = `${100 / totalTicks}%`; 
                 rtBarContainer.appendChild(tickElement);
             }
-
             let ticksToRemove = totalTicks;
             rtIntervalId = setInterval(() => {
                 const ticks = rtBarContainer.querySelectorAll('.rt-tick:not(.fading)');
-                if (ticks.length > 0) {
-                    ticks[ticks.length - 1].classList.add('fading'); 
-                }
+                if (ticks.length > 0) ticks[ticks.length - 1].classList.add('fading'); 
                 ticksToRemove--;
                 if (ticksToRemove <= 0) {
-                    clearInterval(rtIntervalId);
-                    rtIntervalId = null;
+                    clearInterval(rtIntervalId); rtIntervalId = null;
                     setTimeout(() => { 
-                        rtBarContainer.classList.remove('active');
-                        rtBarContainer.innerHTML = ''; 
-                        commandInput.disabled = false;
-                        commandInput.focus();
-                        console.log("CLIENT: Round time finished.");
+                        rtBarContainer.classList.remove('active'); rtBarContainer.innerHTML = ''; 
+                        commandInput.disabled = false; commandInput.focus();
                     }, 300); 
                 }
             }, tickDurationMs);
         }
 
-
         commandInput.addEventListener('keypress', (event) => {
             if (event.key === 'Enter') {
                 const command = commandInput.value;
                 if (command && !commandInput.disabled) { 
-                    if (commandHistory.length === 0 || command !== commandHistory[commandHistory.length - 1]) {
-                        commandHistory.push(command);
-                    }
+                    if (commandHistory.length === 0 || command !== commandHistory[commandHistory.length - 1]) commandHistory.push(command);
                     if (commandHistory.length > 20) commandHistory.shift(); 
                     historyIndex = commandHistory.length;
                     socket.emit('player_command', { command: command });
@@ -348,31 +268,17 @@
             }
         });
         commandInput.addEventListener('keydown', (event) => {
-            if (commandInput.disabled && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-                event.preventDefault(); return; 
-            }
-            if (commandHistory.length === 0 && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-                 event.preventDefault(); return;
-            }
+            if (commandInput.disabled && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) { event.preventDefault(); return; }
+            if (commandHistory.length === 0 && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) { event.preventDefault(); return; }
             if (event.key === 'ArrowUp') {
                 event.preventDefault(); 
-                if (historyIndex > 0) {
-                    historyIndex--;
-                    commandInput.value = commandHistory[historyIndex] || '';
-                    commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
-                } else if (historyIndex === 0 && commandHistory.length > 0) {
-                    commandInput.value = commandHistory[0] || ''; 
-                    commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
-                }
+                if (historyIndex > 0) { historyIndex--; commandInput.value = commandHistory[historyIndex] || ''; } 
+                else if (historyIndex === 0 && commandHistory.length > 0) { commandInput.value = commandHistory[0] || ''; }
+                commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
             } else if (event.key === 'ArrowDown') {
                 event.preventDefault();
-                if (historyIndex < commandHistory.length - 1) {
-                    historyIndex++;
-                    commandInput.value = commandHistory[historyIndex] || '';
-                } else { 
-                     historyIndex = commandHistory.length; 
-                     commandInput.value = ''; 
-                }
+                if (historyIndex < commandHistory.length - 1) { historyIndex++; commandInput.value = commandHistory[historyIndex] || ''; } 
+                else { historyIndex = commandHistory.length; commandInput.value = ''; }
                 commandInput.setSelectionRange(commandInput.value.length, commandInput.value.length);
             }
         });
@@ -382,8 +288,7 @@
             console.error("CLIENT: Socket disconnected. Reason:", reason);
             addMessage(`Disconnected from server. Reason: ${reason}`, 'error_critical'); 
             if (rtIntervalId) clearInterval(rtIntervalId); 
-            rtBarContainer.classList.remove('active');
-            commandInput.disabled = false;
+            rtBarContainer.classList.remove('active'); commandInput.disabled = false;
         });
         socket.on('connect_error', (error) => {
             console.error("CLIENT: Socket connection error:", error);
@@ -391,29 +296,22 @@
         });
 
         socket.on('game_messages', (data) => {
-            console.log("CLIENT: Received 'game_messages' batch:", data);
+            // console.log("CLIENT: Received 'game_messages' batch:", data); // Can be noisy
             if (data.messages && Array.isArray(data.messages)) {
                 data.messages.forEach(msg => {
-                    console.log("CLIENT: Processing message object:", msg);
-                    if (msg.type === 'room_data_update') {
-                        displayRoomInfo(msg); 
-                    } else if (msg.type === 'display_race_options') {
-                        displayRaceOptions(msg); 
-                    } else if (msg.text !== undefined) { 
-                        addMessage(msg.text, msg.type || 'normal');
-                    } else {
-                        console.warn("CLIENT: Received unhandled structured message (no .text and not a known special type):", msg);
-                    }
+                    // console.log("CLIENT: Processing message object:", msg); // Can be noisy
+                    if (msg.type === 'room_data_update') displayRoomInfo(msg); 
+                    else if (msg.type === 'display_race_options') displayRaceOptions(msg); 
+                    else if (msg.text !== undefined) addMessage(msg.text, msg.type || 'normal');
+                    else console.warn("CLIENT: Received unhandled structured message:", msg);
                 });
-            } else {
-                console.warn("CLIENT: Received 'game_messages' but data.messages is not a valid array:", data);
-            }
+            } else { console.warn("CLIENT: Received 'game_messages' but data.messages is invalid:", data); }
         });
         
         socket.on('stats_update', (data) => {
-            console.log("CLIENT: Received 'stats_update':", data);
+            // console.log("CLIENT: Received 'stats_update':", data); // Can be noisy
             if (data && data.raw_stats && typeof data.raw_stats === 'object') { 
-                let statsText = `Name: ${data.raw_stats.name || '-'} | Lvl: ${data.raw_stats.level || '-'} | XP: ${data.raw_stats.xp || '-'}/- (Pool: ${data.raw_stats.unabsorbed_xp || 0})<br>HP: ${data.raw_stats.hp || '-'}/${data.raw_stats.max_hp || '-'} | MP: ${data.raw_stats.mp || '-'}/${data.raw_stats.max_mp || '-'} | SP: ${data.raw_stats.sp || '-'}/${data.raw_stats.max_sp || '-'} | Gold: -<br>Mind: ${data.raw_stats.mind_status || '-'}`;
+                let statsText = `Name: ${data.raw_stats.name || '-'} | Lvl: ${data.raw_stats.level || '-'} | XP: ${data.raw_stats.xp || '-'}/${data.raw_stats.xp_for_next_level || '-'} (Pool: ${data.raw_stats.unabsorbed_xp || 0})<br>HP: ${data.raw_stats.hp || '-'}/${data.raw_stats.max_hp || '-'} | MP: ${data.raw_stats.mp || '-'}/${data.raw_stats.max_mp || '-'} | SP: ${data.raw_stats.sp || '-'}/${data.raw_stats.max_sp || '-'} | Gold: ${data.raw_stats.gold || 0}<br>Mind: ${data.raw_stats.mind_status || '-'}`;
                 statsArea.innerHTML = statsText; 
             }
         });
